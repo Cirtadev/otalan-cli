@@ -5,10 +5,10 @@ Otalan CLI for bundling and publishing OTA updates.
 ## What It Does
 
 - logs into the Otalan API
-- initializes local project config
+- links the current repo to an Otalan app
 - bundles Capacitor or Expo web output
 - publishes a bundle
-- lists remote bundles
+- lists published bundles
 - rolls back to an older bundle
 - shows current bundle status
 
@@ -53,6 +53,8 @@ Example project config:
   "appId": "com.example.app"
 }
 ```
+
+`otalan.config.json` only links the repo to an Otalan project/app. Bundle and release targeting data such as `target`, `platform`, `nativeVersion`, and `bundleId` live in `.otalan/bundle/manifest.json`.
 
 ## Commands
 
@@ -109,12 +111,20 @@ Current behavior:
 - Capacitor reads `dist/` or `www/`
 - Expo runs `bunx expo export`
 - both outputs produce a ZIP plus `manifest.json`
+- `--platform` is required so the CLI can resolve the correct native version
+
+Native version defaults:
+
+- Capacitor iOS reads `CFBundleShortVersionString` from `Info.plist` and resolves `$(MARKETING_VERSION)` from the Xcode project when needed
+- Capacitor Android reads `versionName` from `android/app/build.gradle` or `build.gradle.kts`
+- Expo reads the selected platform version from Expo config and falls back to the top-level Expo `version`
+- `--native-version` overrides auto-detection
 
 Choose the bundle ID you want to publish:
 
 ```bash
-otalan bundle --target capacitor --bundle-id 1.0.5
-otalan bundle --target expo --bundle-id 1.0.5
+otalan bundle --target capacitor --platform ios --bundle-id 1.0.5
+otalan bundle --target expo --platform ios --bundle-id 1.0.5
 ```
 
 `bundleId` is the customer-facing OTA release identifier for all targets. The CLI maps it to the target-specific metadata internally.
@@ -127,7 +137,7 @@ If you omit `bundleId`:
 If you want to take the bundle ID from `package.json` instead:
 
 ```bash
-otalan bundle --target capacitor --bundle-from-package
+otalan bundle --target capacitor --platform ios --bundle-from-package
 ```
 
 ### `otalan publish`
@@ -135,6 +145,12 @@ otalan bundle --target capacitor --bundle-from-package
 Publishes the current bundle output.
 
 `otalan publish` uses the `bundleId`, `platform`, and `nativeVersion` already stored in `.otalan/bundle/manifest.json`. To publish `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
+
+Current behavior:
+
+- `channel` is chosen at publish time
+- `--platform` and `--native-version` can override the manifest, but only if they match it
+- `--output-dir` lets you publish a bundle from a non-default folder
 
 Default flow:
 
@@ -154,24 +170,35 @@ otalan publish \
 
 Lists remote bundles for the current app so you can choose a bundle for rollback or rollout operations.
 
+Default resolution order:
+
+1. `--native-version`
+2. `.otalan/bundle/manifest.json` if present and the manifest platform matches the selected platform
+3. native version derived from the selected platform in the local app project
+4. interactive prompt
+
 ```bash
-otalan bundles --platform ios --channel production --native-version 1.0.0
+otalan bundles --platform ios --channel production
 ```
 
 ### `otalan rollback`
 
 Reactivates an older bundle for the same tuple.
 
+`rollback` uses the same native-version default order as `bundles`. Pass `--native-version` if you want to override the detected default.
+
 ```bash
-otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production --native-version 1.0.0
+otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
 ```
 
 ### `otalan status`
 
 Shows the active bundle plus matching bundle history.
 
+`status` also uses the same native-version default order as `bundles`.
+
 ```bash
-otalan status --platform ios --channel production --native-version 1.0.0
+otalan status --platform ios --channel production
 ```
 
 ## Bundle Output
@@ -214,3 +241,4 @@ otalan status --platform ios --channel production --native-version 1.0.0
 - Default API URL is `https://api.otalan.com`.
 - Local development API URL is `http://localhost:8787`.
 - Publishing, rollback, status, and `bundles` expect a CI key.
+- Run `bun run build` after changing CLI source if you want `dist/bin.js` updated locally.
