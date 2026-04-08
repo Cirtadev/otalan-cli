@@ -4,6 +4,9 @@ import path from 'node:path'
 
 import { z } from 'zod'
 
+export type Target = 'capacitor' | 'expo'
+export type MobilePlatform = 'ios' | 'android'
+
 // -----------------------------------------------------------------------------
 // Schemas
 // -----------------------------------------------------------------------------
@@ -13,27 +16,14 @@ const globalConfigSchema = z.object({
   apiUrl: z.url().default('https://api.otalan.com'),
 })
 
-const projectConfigFileSchema = z.object({
-  projectId: z.string().min(1).optional(),
+const projectConfigSchema = z.object({
   organizationSlug: z.string().min(1).optional(),
   projectSlug: z.string().min(1).optional(),
   appId: z.string().min(1),
-  target: z.enum(['capacitor', 'expo']),
-  channel: z.string().min(1).default('production'),
-  platform: z.enum(['ios', 'android']).optional(),
-  nativeVersion: z.string().min(1).optional(),
-  currentVersion: z.string().min(1).optional(),
 })
-
-const projectConfigSchema = projectConfigFileSchema.transform(({ currentVersion, nativeVersion, ...rest }) => ({
-  ...rest,
-  nativeVersion: nativeVersion ?? currentVersion,
-}))
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>
 export type ProjectConfig = z.infer<typeof projectConfigSchema>
-export type Target = ProjectConfig['target']
-export type MobilePlatform = NonNullable<ProjectConfig['platform']>
 
 // -----------------------------------------------------------------------------
 // Paths
@@ -81,9 +71,5 @@ export async function saveProjectConfig(cwd: string, config: ProjectConfig) {
     organizationSlug: parsed.organizationSlug,
     projectSlug: parsed.projectSlug,
     appId: parsed.appId,
-    target: parsed.target,
-    channel: parsed.channel,
-    platform: parsed.platform,
-    nativeVersion: parsed.nativeVersion,
   })
 }

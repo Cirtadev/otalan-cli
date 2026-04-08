@@ -5,30 +5,30 @@ import path from 'node:path'
 
 import { zipSync } from 'fflate'
 
-import type { MobilePlatform, ProjectConfig, Target } from './config'
+import type { MobilePlatform, Target } from './config'
 
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
 
-export type CapacitorBundleManifest = {
-  type: 'capacitor'
+type BundleBaseManifest = {
+  target: Target
   hash: string
-  version: string
+  nativeVersion: string
   bundleId: string
   createdAt: string
-  platform?: MobilePlatform
+  platform: MobilePlatform
 }
 
-export type ExpoBundleManifest = {
-  type: 'expo'
-  hash: string
+export type CapacitorBundleManifest = BundleBaseManifest & {
+  target: 'capacitor'
+}
+
+export type ExpoBundleManifest = BundleBaseManifest & {
+  target: 'expo'
   runtimeVersion: string
-  bundleId: string
   launchAsset: string
   assets: string[]
-  createdAt: string
-  platform?: MobilePlatform
 }
 
 export type BundleManifest = CapacitorBundleManifest | ExpoBundleManifest
@@ -42,8 +42,7 @@ type BundleOptions = {
   nativeVersion?: string
   runtimeVersion?: string
   inputDir?: string
-  platform?: MobilePlatform
-  projectConfig?: ProjectConfig
+  platform: MobilePlatform
   target: Target
 }
 
@@ -59,6 +58,14 @@ type BundleResult = {
 
 async function pathExists(filePath: string) {
   return Bun.file(filePath).exists()
+}
+
+async function readTextFileIfExists(filePath: string) {
+  if (!(await pathExists(filePath))) {
+    return null
+  }
+
+  return Bun.file(filePath).text()
 }
 
 async function pathIsDirectory(directoryPath: string) {
@@ -147,10 +154,6 @@ async function readPackageVersion(cwd: string) {
   return raw.version
 }
 
-function resolveConfiguredNativeVersion(options: BundleOptions) {
-  return options.nativeVersion ?? options.projectConfig?.nativeVersion
-}
-
 function resolveCapacitorInputDir(cwd: string, inputDir?: string) {
   const candidates = inputDir
     ? [inputDir]
@@ -187,11 +190,18 @@ async function runCommand(command: string, args: string[], cwd: string) {
   }
 }
 
-async function resolveExpoRuntimeVersion(cwd: string, runtimeVersion?: string) {
-  if (runtimeVersion) {
-    return runtimeVersion
+type ExpoConfig = {
+  runtimeVersion?: string | Record<string, unknown>
+  version?: string
+  ios?: {
+    version?: string
   }
+  android?: {
+    version?: string
+  }
+}
 
+async function readExpoConfig(cwd: string): Promise<ExpoConfig> {
   const proc = Bun.spawn(['bunx', 'expo', 'config', '--json'], {
     cwd,
     stdout: 'pipe',
@@ -206,21 +216,251 @@ async function resolveExpoRuntimeVersion(cwd: string, runtimeVersion?: string) {
   const output = await new Response(proc.stdout).text()
 
   const parsed = JSON.parse(output) as {
-    exp?: {
-      runtimeVersion?: string | Record<string, unknown>
-    }
-    expo?: {
-      runtimeVersion?: string | Record<string, unknown>
-    }
+    exp?: ExpoConfig
+    expo?: ExpoConfig
   }
 
-  const resolved = parsed.exp?.runtimeVersion ?? parsed.expo?.runtimeVersion
+  return parsed.exp ?? parsed.expo ?? {}
+}
+
+function resolveExpoRuntimeVersion(config: ExpoConfig, runtimeVersion?: string) {
+  if (runtimeVersion) {
+    return runtimeVersion
+  }
+
+  const resolved = config.runtimeVersion
 
   if (typeof resolved !== 'string' || resolved.length === 0) {
     throw new Error('Expo runtimeVersion is required. Pass --bundle-id or set a string runtimeVersion in Expo config.')
   }
 
   return resolved
+}
+
+function resolveExpoNativeVersion(config: ExpoConfig, platform: MobilePlatform, nativeVersion?: string) {
+  if (nativeVersion) {
+    return nativeVersion
+  }
+
+  const platformVersion = platform === 'ios'
+    ? config.ios?.version
+    : config.android?.version
+  const resolved = platformVersion ?? config.version
+
+  if (typeof resolved !== 'string' || resolved.length === 0) {
+    throw new Error('Unable to resolve Expo native version. Pass --native-version or set a version in Expo config.')
+  }
+
+  return resolved
+}
+
+function extractIosPlistString(contents: string, key: string) {
+  const match = contents.match(new RegExp(`<key>\\s*${key}\\s*<\\/key>\\s*<string>\\s*([^<]+?)\\s*<\\/string>`, 's'))
+  return match?.[1]?.trim()
+}
+
+function extractXcodeBuildSettingReference(value: string) {
+  const match = value.trim().match(/^\$\(([^):]+)(?::[^)]+)?\)$|^\$\{([^}:]+)(?::[^}]+)?\}$/)
+  return match?.[1] ?? match?.[2]
+}
+
+function extractXcodeBuildSettingValue(contents: string, key: string) {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const matches = [
+    ...contents.matchAll(new RegExp(`\\b${escapedKey}\\s*=\\s*([^;\\n]+)\\s*;`, 'g')),
+    ...contents.matchAll(new RegExp(`^\\s*${escapedKey}\\s*=\\s*(.+?)\\s*$`, 'gm')),
+  ]
+  const value = matches.at(-1)?.[1]?.trim()
+
+  if (!value) {
+    return undefined
+  }
+
+  return value
+    .replace(/;\s*$/, '')
+    .replace(/^["']|["']$/g, '')
+    .trim()
+}
+
+async function resolveIosBuildSetting(cwd: string, key: string, seen = new Set<string>()): Promise<string | undefined> {
+  if (seen.has(key)) {
+    return undefined
+  }
+
+  const nextSeen = new Set(seen)
+  nextSeen.add(key)
+  const candidates = [
+    path.join(cwd, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj'),
+    path.join(cwd, 'ios', 'App.xcodeproj', 'project.pbxproj'),
+  ]
+
+  for (const candidate of candidates) {
+    const contents = await readTextFileIfExists(candidate)
+
+    if (!contents) {
+      continue
+    }
+
+    const value = extractXcodeBuildSettingValue(contents, key)
+
+    if (!value) {
+      continue
+    }
+
+    const nestedReference = extractXcodeBuildSettingReference(value)
+
+    if (!nestedReference) {
+      return value
+    }
+
+    const resolvedNestedValue: string | undefined = await resolveIosBuildSetting(cwd, nestedReference, nextSeen)
+
+    if (resolvedNestedValue) {
+      return resolvedNestedValue
+    }
+  }
+
+  return undefined
+}
+
+async function resolveIosVersionValue(cwd: string, value: string) {
+  const buildSettingReference = extractXcodeBuildSettingReference(value)
+
+  if (!buildSettingReference) {
+    return value
+  }
+
+  const resolvedValue = await resolveIosBuildSetting(cwd, buildSettingReference)
+
+  if (resolvedValue) {
+    return resolvedValue
+  }
+
+  throw new Error(`Unable to resolve iOS native version placeholder "${value}". Pass --native-version or ensure ${buildSettingReference} is defined in the Xcode project.`)
+}
+
+async function resolveIosNativeVersion(cwd: string, nativeVersion?: string) {
+  if (nativeVersion) {
+    return nativeVersion
+  }
+
+  const candidates = [
+    path.join(cwd, 'ios', 'App', 'App', 'Info.plist'),
+    path.join(cwd, 'ios', 'App', 'Info.plist'),
+  ]
+
+  for (const candidate of candidates) {
+    const contents = await readTextFileIfExists(candidate)
+
+    if (!contents) {
+      continue
+    }
+
+    const version = extractIosPlistString(contents, 'CFBundleShortVersionString')
+
+    if (version) {
+      return resolveIosVersionValue(cwd, version)
+    }
+  }
+
+  throw new Error('Unable to resolve iOS native version. Pass --native-version or ensure Info.plist defines CFBundleShortVersionString.')
+}
+
+async function resolveAndroidNativeVersion(cwd: string, nativeVersion?: string) {
+  if (nativeVersion) {
+    return nativeVersion
+  }
+
+  const candidates = [
+    path.join(cwd, 'android', 'app', 'build.gradle'),
+    path.join(cwd, 'android', 'app', 'build.gradle.kts'),
+  ]
+
+  for (const candidate of candidates) {
+    const contents = await readTextFileIfExists(candidate)
+
+    if (!contents) {
+      continue
+    }
+
+    const match = contents.match(/versionName\s*(?:=)?\s*["']([^"']+)["']/)
+
+    if (match?.[1]) {
+      return match[1].trim()
+    }
+  }
+
+  throw new Error('Unable to resolve Android native version. Pass --native-version or ensure build.gradle defines versionName as a string literal.')
+}
+
+async function resolveCapacitorNativeVersion(
+  cwd: string,
+  platform: MobilePlatform,
+  nativeVersion?: string,
+) {
+  if (platform === 'ios') {
+    return resolveIosNativeVersion(cwd, nativeVersion)
+  }
+
+  return resolveAndroidNativeVersion(cwd, nativeVersion)
+}
+
+export async function resolveProjectNativeVersion(
+  cwd: string,
+  platform: MobilePlatform,
+  nativeVersion?: string,
+) {
+  if (nativeVersion) {
+    return nativeVersion
+  }
+
+  const nativeResolver = platform === 'ios'
+    ? resolveIosNativeVersion
+    : resolveAndroidNativeVersion
+  const nativeResult = await nativeResolver(cwd).catch(() => null)
+
+  if (nativeResult) {
+    return nativeResult
+  }
+
+  const expoConfig = await readExpoConfig(cwd).catch(() => null)
+
+  if (expoConfig) {
+    return resolveExpoNativeVersion(expoConfig, platform)
+  }
+
+  throw new Error(`Unable to resolve ${platform} native version. Pass --native-version to override.`)
+}
+
+function resolveBundleId(input: {
+  bundleId?: string
+  bundleFromPackage?: boolean
+  packageVersion?: string
+  nativeVersion: string
+  hash: string
+}) {
+  if (input.bundleId) {
+    return {
+      bundleId: normalizeBundleId(input.bundleId),
+      bundleIdSource: 'flag' as const,
+    }
+  }
+
+  if (input.bundleFromPackage) {
+    if (!input.packageVersion) {
+      throw new Error('`--bundle-from-package` requires a package.json version.')
+    }
+
+    return {
+      bundleId: normalizeBundleId(input.packageVersion),
+      bundleIdSource: 'package-json' as const,
+    }
+  }
+
+  return {
+    bundleId: createAutoBundleId(input.nativeVersion, input.hash),
+    bundleIdSource: 'native-version' as const,
+  }
 }
 
 async function buildExpoAssetManifest(exportDir: string) {
@@ -266,36 +506,26 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
 
   const bundleBytes = await zipDirectory(inputDirectory)
   const hash = hashBytes(bundleBytes)
-  const nativeVersion = resolveConfiguredNativeVersion(options)
+  const nativeVersion = await resolveCapacitorNativeVersion(
+    options.cwd,
+    options.platform,
+    options.nativeVersion,
+  )
   const packageVersion = await readPackageVersion(options.cwd)
-  let bundleId: string
-  let bundleIdSource: BundleIdSource
-
-  if (options.bundleId) {
-    bundleId = normalizeBundleId(options.bundleId)
-    bundleIdSource = 'flag'
-  } else if (options.bundleFromPackage) {
-    if (!packageVersion) {
-      throw new Error('`--bundle-from-package` requires a package.json version.')
-    }
-
-    bundleId = normalizeBundleId(packageVersion)
-    bundleIdSource = 'package-json'
-  } else if (nativeVersion) {
-    bundleId = createAutoBundleId(nativeVersion, hash)
-    bundleIdSource = 'native-version'
-  } else {
-    throw new Error('Bundle ID requires nativeVersion in otalan.config.json or --native-version. Use --bundle-from-package to take it from package.json or --bundle-id to set it explicitly.')
-  }
-
-  const version = packageVersion ?? nativeVersion ?? bundleId
-  const manifest: CapacitorBundleManifest = {
-    type: 'capacitor',
+  const { bundleId, bundleIdSource } = resolveBundleId({
+    bundleId: options.bundleId,
+    bundleFromPackage: options.bundleFromPackage,
+    packageVersion,
+    nativeVersion,
     hash,
-    version,
+  })
+  const manifest: CapacitorBundleManifest = {
+    target: 'capacitor',
+    hash,
+    nativeVersion,
     bundleId,
     createdAt: new Date().toISOString(),
-    platform: options.platform ?? options.projectConfig?.platform,
+    platform: options.platform,
   }
 
   await writeBundleOutput(options.outputDir, bundleBytes, manifest)
@@ -313,41 +543,31 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
   try {
     await runCommand('bunx', ['expo', 'export', '--output-dir', exportDir], options.cwd)
 
-    const runtimeVersion = await resolveExpoRuntimeVersion(options.cwd, options.runtimeVersion)
+    const expoConfig = await readExpoConfig(options.cwd)
+    const runtimeVersion = resolveExpoRuntimeVersion(expoConfig, options.runtimeVersion)
     const bundleBytes = await zipDirectory(exportDir)
     const hash = hashBytes(bundleBytes)
     const assets = await buildExpoAssetManifest(exportDir)
-    const nativeVersion = resolveConfiguredNativeVersion(options)
+    const nativeVersion = resolveExpoNativeVersion(expoConfig, options.platform, options.nativeVersion)
     const packageVersion = await readPackageVersion(options.cwd)
-    let bundleId: string
-    let bundleIdSource: BundleIdSource
-
-    if (options.bundleId) {
-      bundleId = normalizeBundleId(options.bundleId)
-      bundleIdSource = 'flag'
-    } else if (options.bundleFromPackage) {
-      if (!packageVersion) {
-        throw new Error('`--bundle-from-package` requires a package.json version.')
-      }
-
-      bundleId = normalizeBundleId(packageVersion)
-      bundleIdSource = 'package-json'
-    } else if (nativeVersion) {
-      bundleId = createAutoBundleId(nativeVersion, hash)
-      bundleIdSource = 'native-version'
-    } else {
-      throw new Error('Bundle ID requires nativeVersion in otalan.config.json or --native-version. Use --bundle-from-package to take it from package.json or --bundle-id to set it explicitly.')
-    }
+    const { bundleId, bundleIdSource } = resolveBundleId({
+      bundleId: options.bundleId,
+      bundleFromPackage: options.bundleFromPackage,
+      packageVersion,
+      nativeVersion,
+      hash,
+    })
 
     const manifest: ExpoBundleManifest = {
-      type: 'expo',
+      target: 'expo',
       hash,
+      nativeVersion,
       runtimeVersion,
       bundleId,
       launchAsset: assets.launchAsset,
       assets: assets.assets,
       createdAt: new Date().toISOString(),
-      platform: options.platform ?? options.projectConfig?.platform,
+      platform: options.platform,
     }
 
     await writeBundleOutput(options.outputDir, bundleBytes, manifest)
