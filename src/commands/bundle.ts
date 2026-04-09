@@ -5,26 +5,46 @@ import { readBooleanOption, readStringOption } from '../cli/args'
 import { resolvePlatform, resolveTarget, type CommandContext } from '../cli/helpers'
 import type { MobilePlatform, Target } from '../config'
 import { formatBundleIdSource, printJson } from '../cli/output'
-import { promptWithHint } from '../cli/prompts'
+import { promptSelectWithHint } from '../cli/prompts'
+
+// -----------------------------------------------------------------------------
+// Prompt options
+// -----------------------------------------------------------------------------
+
+const TARGET_OPTIONS = [
+  { label: 'capacitor', value: 'capacitor' },
+  { label: 'expo', value: 'expo' },
+] as const satisfies ReadonlyArray<{ label: string, value: Target }>
+
+const PLATFORM_OPTIONS = [
+  { label: 'ios', value: 'ios' },
+  { label: 'android', value: 'android' },
+] as const satisfies ReadonlyArray<{ label: string, value: MobilePlatform }>
+
+// -----------------------------------------------------------------------------
+// Command
+// -----------------------------------------------------------------------------
 
 export async function handleBundle(context: CommandContext, options: Record<string, string | boolean>) {
   const targetFallback = readStringOption(options, 'target')
     ? undefined
-    : await promptWithHint({
+    : await promptSelectWithHint({
       question: 'Target',
       fallback: 'capacitor',
       hint: 'OTA client type: capacitor or expo. Use expo for Expo or React Native projects.',
-    }) as Target
+      options: TARGET_OPTIONS,
+    })
   const target = resolveTarget(
     options,
     targetFallback,
   )
   const platformFallback = readStringOption(options, 'platform')
     ? undefined
-    : await promptWithHint({
+    : await promptSelectWithHint({
       question: 'Platform',
       hint: 'Target mobile platform: ios or android.',
-    }) as MobilePlatform
+      options: PLATFORM_OPTIONS,
+    })
   const platform = resolvePlatform(
     options,
     platformFallback,

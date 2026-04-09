@@ -3,14 +3,19 @@
   "version": "1.0.0",
   "description": "Otalan CLI for bundling and publishing OTA updates.",
   "type": "module",
+  "files": [
+    "dist/bin.js",
+    "README.md"
+  ],
   "bin": {
     "otalan": "./dist/bin.js"
   },
   "scripts": {
-    "build": "bun build ./src/bin.ts --target bun --outdir ./dist --minify --bytecode",
-    "compile:macos": "bun build --compile --minify --bytecode --target=bun-darwin-arm64 ./src/bin.ts --outfile ./dist/bin.macos-arm64",
-    "compile:linux": "bun build --compile --minify --bytecode --target=bun-linux-x64 ./src/bin.ts --outfile ./dist/bin.linux-x64",
-    "compile:windows": "bun build --compile --minify --bytecode --target=bun-windows-x64 ./src/bin.ts --outfile ./dist/bin.windows-x64",
+    "prepack": "bun run build",
+    "build": "bun build ./src/bin.ts --target bun --outdir ./dist --minify",
+    "compile:macos": "bun build --compile --minify --target=bun-darwin-arm64 ./src/bin.ts --outfile ./dist/bin.macos-arm64",
+    "compile:linux": "bun build --compile --minify --target=bun-linux-x64 ./src/bin.ts --outfile ./dist/bin.linux-x64",
+    "compile:windows": "bun build --compile --minify --target=bun-windows-x64 ./src/bin.ts --outfile ./dist/bin.windows-x64",
     "compile:all": "bun run compile:macos && bun run compile:linux && bun run compile:windows",
     "check": "tsc -p tsconfig.json",
     "lint": "eslint .",
@@ -27,6 +32,6 @@
     "eslint": "^10.2.0",
     "jiti": "^2.6.1",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.58.0"
+    "typescript-eslint": "^8.58.1"
   }
 }

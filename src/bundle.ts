@@ -20,6 +20,8 @@ type BundleBaseManifest = {
   platform: MobilePlatform
 }
 
+type JsonObject = Record<string, unknown>
+
 export type CapacitorBundleManifest = BundleBaseManifest & {
   target: 'capacitor'
 }
@@ -29,6 +31,7 @@ export type ExpoBundleManifest = BundleBaseManifest & {
   runtimeVersion: string
   launchAsset: string
   assets: string[]
+  expoConfig: JsonObject
 }
 
 export type BundleManifest = CapacitorBundleManifest | ExpoBundleManifest
@@ -190,16 +193,29 @@ async function runCommand(command: string, args: string[], cwd: string) {
   }
 }
 
-type ExpoConfig = {
-  runtimeVersion?: string | Record<string, unknown>
+type ExpoConfig = JsonObject & {
+  runtimeVersion?: ExpoRuntimeVersionConfig
+  sdkVersion?: string
   version?: string
-  ios?: {
+  ios?: JsonObject & {
     version?: string
+    buildNumber?: string
+    runtimeVersion?: ExpoRuntimeVersionConfig
   }
-  android?: {
+  android?: JsonObject & {
     version?: string
+    versionCode?: string | number
+    runtimeVersion?: ExpoRuntimeVersionConfig
   }
 }
+
+type ExpoRuntimeVersionConfig = string | {
+  policy?: string
+}
+
+// -----------------------------------------------------------------------------
+// Expo config helpers
+// -----------------------------------------------------------------------------
 
 async function readExpoConfig(cwd: string): Promise<ExpoConfig> {
   const proc = Bun.spawn(['bunx', 'expo', 'config', '--json'], {
@@ -215,26 +231,79 @@ async function readExpoConfig(cwd: string): Promise<ExpoConfig> {
 
   const output = await new Response(proc.stdout).text()
 
-  const parsed = JSON.parse(output) as {
+  const parsed = JSON.parse(output) as ExpoConfig & {
     exp?: ExpoConfig
     expo?: ExpoConfig
   }
 
-  return parsed.exp ?? parsed.expo ?? {}
+  return parsed.exp ?? parsed.expo ?? parsed
 }
 
-function resolveExpoRuntimeVersion(config: ExpoConfig, runtimeVersion?: string) {
-  if (runtimeVersion) {
-    return runtimeVersion
+function normalizeOptionalString(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined
   }
 
-  const resolved = config.runtimeVersion
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
+}
 
-  if (typeof resolved !== 'string' || resolved.length === 0) {
-    throw new Error('Expo runtimeVersion is required. Pass --bundle-id or set a string runtimeVersion in Expo config.')
+function resolveExpoConfiguredVersion(config: ExpoConfig, platform: MobilePlatform) {
+  return normalizeOptionalString(
+    platform === 'ios'
+      ? config.ios?.version ?? config.version
+      : config.android?.version ?? config.version,
+  )
+}
+
+function resolveExpoConfiguredBuildVersion(config: ExpoConfig, platform: MobilePlatform) {
+  const value = platform === 'ios'
+    ? config.ios?.buildNumber
+    : config.android?.versionCode
+
+  if (typeof value === 'number') {
+    return `${value}`
   }
 
-  return resolved
+  return normalizeOptionalString(value)
+}
+
+function resolveExpoRuntimeVersionPolicy(
+  config: ExpoConfig,
+  platform: MobilePlatform,
+  policy: string,
+) {
+  const appVersion = resolveExpoConfiguredVersion(config, platform)
+
+  switch (policy) {
+    case 'appVersion': {
+      if (!appVersion) {
+        throw new Error('Unable to resolve Expo runtimeVersion policy "appVersion". Set version in Expo config or pass --runtime-version.')
+      }
+
+      return appVersion
+    }
+    case 'nativeVersion': {
+      const buildVersion = resolveExpoConfiguredBuildVersion(config, platform)
+
+      if (!appVersion || !buildVersion) {
+        throw new Error(`Unable to resolve Expo runtimeVersion policy "nativeVersion" for ${platform}. Set version and ${platform === 'ios' ? 'ios.buildNumber' : 'android.versionCode'} in Expo config or pass --runtime-version.`)
+      }
+
+      return `${appVersion}(${buildVersion})`
+    }
+    case 'sdkVersion': {
+      const sdkVersion = normalizeOptionalString(config.sdkVersion)
+
+      if (!sdkVersion) {
+        throw new Error('Unable to resolve Expo runtimeVersion policy "sdkVersion". Set sdkVersion in Expo config or pass --runtime-version.')
+      }
+
+      return `exposdk:${sdkVersion}`
+    }
+    default:
+      throw new Error(`Unable to resolve Expo runtimeVersion policy "${policy}". Pass --runtime-version or use a resolved Expo runtimeVersion.`)
+  }
 }
 
 function resolveExpoNativeVersion(config: ExpoConfig, platform: MobilePlatform, nativeVersion?: string) {
@@ -242,16 +311,100 @@ function resolveExpoNativeVersion(config: ExpoConfig, platform: MobilePlatform, 
     return nativeVersion
   }
 
-  const platformVersion = platform === 'ios'
-    ? config.ios?.version
-    : config.android?.version
-  const resolved = platformVersion ?? config.version
+  const resolved = resolveExpoConfiguredVersion(config, platform)
 
-  if (typeof resolved !== 'string' || resolved.length === 0) {
+  if (!resolved) {
     throw new Error('Unable to resolve Expo native version. Pass --native-version or set a version in Expo config.')
   }
 
   return resolved
+}
+
+function findRuntimeVersionInObject(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const resolved = findRuntimeVersionInObject(item)
+
+      if (resolved) {
+        return resolved
+      }
+    }
+
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const runtimeVersion = normalizeOptionalString(record.runtimeVersion)
+
+  if (runtimeVersion) {
+    return runtimeVersion
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    const resolved = findRuntimeVersionInObject(nestedValue)
+
+    if (resolved) {
+      return resolved
+    }
+  }
+
+  return undefined
+}
+
+async function readExpoExportRuntimeVersion(exportDir: string) {
+  const metadataPath = path.join(exportDir, 'metadata.json')
+  const contents = await readTextFileIfExists(metadataPath)
+
+  if (!contents) {
+    return undefined
+  }
+
+  try {
+    return findRuntimeVersionInObject(JSON.parse(contents) as unknown)
+  } catch {
+    return undefined
+  }
+}
+
+function resolveExpoRuntimeVersion(
+  config: ExpoConfig,
+  platform: MobilePlatform,
+  runtimeVersion?: string,
+  exportedRuntimeVersion?: string,
+) {
+  if (runtimeVersion?.trim()) {
+    return runtimeVersion.trim()
+  }
+
+  if (exportedRuntimeVersion?.trim()) {
+    return exportedRuntimeVersion.trim()
+  }
+
+  const resolved = platform === 'ios'
+    ? config.ios?.runtimeVersion ?? config.runtimeVersion
+    : config.android?.runtimeVersion ?? config.runtimeVersion
+
+  if (typeof resolved === 'string' && resolved.trim()) {
+    return resolved.trim()
+  }
+
+  if (resolved && typeof resolved === 'object') {
+    const policy = normalizeOptionalString(resolved.policy)
+
+    if (policy === 'fingerprint') {
+      throw new Error('Unable to resolve Expo runtimeVersion policy "fingerprint" from export metadata. Pass --runtime-version if your Expo export omits metadata.json.')
+    }
+
+    if (policy) {
+      return resolveExpoRuntimeVersionPolicy(config, platform, policy)
+    }
+  }
+
+  throw new Error('Expo runtimeVersion is required. Pass --runtime-version or set runtimeVersion in Expo config.')
 }
 
 function extractIosPlistString(contents: string, key: string) {
@@ -541,10 +694,20 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
   const exportDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-expo-export-'))
 
   try {
-    await runCommand('bunx', ['expo', 'export', '--output-dir', exportDir], options.cwd)
+    await runCommand(
+      'bunx',
+      ['expo', 'export', '--platform', options.platform, '--output-dir', exportDir],
+      options.cwd,
+    )
 
+    const exportedRuntimeVersion = await readExpoExportRuntimeVersion(exportDir)
     const expoConfig = await readExpoConfig(options.cwd)
-    const runtimeVersion = resolveExpoRuntimeVersion(expoConfig, options.runtimeVersion)
+    const runtimeVersion = resolveExpoRuntimeVersion(
+      expoConfig,
+      options.platform,
+      options.runtimeVersion,
+      exportedRuntimeVersion,
+    )
     const bundleBytes = await zipDirectory(exportDir)
     const hash = hashBytes(bundleBytes)
     const assets = await buildExpoAssetManifest(exportDir)
@@ -566,6 +729,7 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       bundleId,
       launchAsset: assets.launchAsset,
       assets: assets.assets,
+      expoConfig,
       createdAt: new Date().toISOString(),
       platform: options.platform,
     }

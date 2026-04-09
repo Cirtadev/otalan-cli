@@ -7,6 +7,7 @@ Otalan CLI for bundling and publishing OTA updates.
 - logs into the Otalan API
 - links the current repo to an Otalan app
 - bundles Capacitor or Expo web output
+- uploads a bundle archive to managed storage
 - publishes a bundle
 - lists published bundles
 - rolls back to an older bundle
@@ -109,15 +110,17 @@ Current behavior:
 
 - Build your Capacitor web assets before running `otalan bundle`
 - Capacitor reads `dist/` or `www/`
-- Expo runs `bunx expo export`
+- Expo runs `bunx expo export --platform <platform>`
+- Expo stores the resolved Expo app config in `.otalan/bundle/manifest.json` so publish/upload can forward it for `extra.expoClient`
 - both outputs produce a ZIP plus `manifest.json`
-- `--platform` is required so the CLI can resolve the correct native version
+- `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
 
 Native version defaults:
 
 - Capacitor iOS reads `CFBundleShortVersionString` from `Info.plist` and resolves `$(MARKETING_VERSION)` from the Xcode project when needed
 - Capacitor Android reads `versionName` from `android/app/build.gradle` or `build.gradle.kts`
 - Expo reads the selected platform version from Expo config and falls back to the top-level Expo `version`
+- Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings
 - `--native-version` overrides auto-detection
 
 Choose the bundle ID you want to publish:
@@ -151,11 +154,27 @@ Current behavior:
 - `channel` is chosen at publish time
 - `--platform` and `--native-version` can override the manifest, but only if they match it
 - `--output-dir` lets you publish a bundle from a non-default folder
+- Expo publish/upload forwards the stored Expo app config when present
 
 Default flow:
 
 ```bash
 otalan publish --channel production
+```
+
+This uses `POST /v1/releases/create`, which uploads the ZIP and publishes it in one request.
+
+### `otalan upload`
+
+Uploads the current bundle archive without publishing it.
+
+Use this when you want the refactored two-step managed storage flow:
+
+1. `otalan upload` to get a managed `storageKey`
+2. `otalan publish --storage-key ...` to activate it later
+
+```bash
+otalan upload --channel production
 ```
 
 Direct publish with existing storage:
@@ -164,6 +183,14 @@ Direct publish with existing storage:
 otalan publish \
   --channel production \
   --storage-key otalan-bundles/example.zip
+```
+
+Direct publish with BYO hosting:
+
+```bash
+otalan publish \
+  --channel production \
+  --download-url https://cdn.example.com/ios/1.0.5.zip
 ```
 
 ### `otalan bundles`
@@ -229,6 +256,11 @@ otalan status --platform ios --channel production
   "assets": [
     "assets/asset_1.png"
   ],
+  "expoConfig": {
+    "name": "Example",
+    "slug": "example",
+    "scheme": "example"
+  },
   "createdAt": "2026-04-07T12:00:00.000Z",
   "platform": "ios"
 }

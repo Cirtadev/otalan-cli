@@ -1,5 +1,6 @@
 import path from 'node:path'
 
+import type { BundleManifest } from '../bundle'
 import { resolveProjectNativeVersion } from '../bundle'
 import { readBooleanOption, readStringOption } from '../cli/args'
 import {
@@ -15,33 +16,99 @@ import {
   resolveProject,
   type CommandContext,
 } from '../cli/helpers'
+import {
+  formatBundleSummary,
+  formatPublishSummary,
+  formatUploadSummary,
+  printBundlesTable,
+} from '../cli/output'
+import { promptSelectWithHint, promptWithHint } from '../cli/prompts'
 import type { MobilePlatform } from '../config'
 import {
   createRelease,
   listReleases,
   publishRelease,
   rollbackRelease,
+  uploadReleaseArchive,
 } from '../http'
-import {
-  formatBundleSummary,
-  formatPublishSummary,
-  printBundlesTable,
-} from '../cli/output'
-import { promptWithHint } from '../cli/prompts'
 
-export async function handlePublish(context: CommandContext, options: Record<string, string | boolean>) {
+// -----------------------------------------------------------------------------
+// Shared helpers
+// -----------------------------------------------------------------------------
+
+const PLATFORM_OPTIONS = [
+  { label: 'ios', value: 'ios' },
+  { label: 'android', value: 'android' },
+] as const satisfies ReadonlyArray<{ label: string, value: MobilePlatform }>
+
+async function resolveReleaseAccess(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
   const api = await resolveApiConfig(options)
   const project = await resolveProject(context)
+
   await assertReleaseContextMatchesConfig({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     organizationSlug: project.organizationSlug,
     projectSlug: project.projectSlug,
   })
-  const outputDir = path.resolve(
+
+  return {
+    api,
+    project,
+  }
+}
+
+function resolveOutputDir(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  return path.resolve(
     context.cwd,
     readStringOption(options, 'output-dir') ?? '.otalan/bundle',
   )
+}
+
+async function resolveDefaultNativeVersion(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+  platform: MobilePlatform,
+) {
+  const manifest = await readBundleManifestIfExists(resolveOutputDir(context, options))
+
+  return readStringOption(options, 'native-version')
+    ?? resolveManifestDefaultNativeVersion(manifest, platform)
+    ?? await resolveProjectNativeVersion(context.cwd, platform).catch(async () => promptWithHint({
+      question: 'Native version',
+      hint: 'Exact native app version.',
+    }))
+}
+
+function resolveRolloutPercent(options: Record<string, string | boolean>) {
+  const rolloutPercent = Number(readStringOption(options, 'rollout-percent') ?? '100')
+
+  if (Number.isNaN(rolloutPercent) || rolloutPercent < 0 || rolloutPercent > 100) {
+    throw new Error('rollout-percent must be between 0 and 100.')
+  }
+
+  return rolloutPercent
+}
+
+async function promptPlatformChoice() {
+  return promptSelectWithHint({
+    question: 'Platform',
+    hint: 'Target mobile platform: ios or android.',
+    options: PLATFORM_OPTIONS,
+  })
+}
+
+async function resolveReleaseTupleFromManifest(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  const outputDir = resolveOutputDir(context, options)
   const manifest = await readBundleManifest(outputDir)
   const platform = resolveManifestPlatform(
     manifest,
@@ -54,18 +121,79 @@ export async function handlePublish(context: CommandContext, options: Record<str
   const channel = readStringOption(options, 'channel') ?? await promptWithHint({
     question: 'Channel',
     fallback: 'production',
-    hint: 'Release channel to publish to.',
+    hint: 'Release channel.',
   })
-  const mandatory = !readBooleanOption(options, 'optional', false)
-  const rolloutPercent = Number(readStringOption(options, 'rollout-percent') ?? '100')
-  const releaseNotes = readStringOption(options, 'release-notes')
 
-  if (Number.isNaN(rolloutPercent) || rolloutPercent < 0 || rolloutPercent > 100) {
-    throw new Error('rollout-percent must be between 0 and 100.')
+  return {
+    outputDir,
+    manifest,
+    platform,
+    nativeVersion,
+    channel,
+  }
+}
+
+function resolveManifestExpoConfig(manifest: BundleManifest) {
+  if (manifest.target !== 'expo') {
+    return undefined
   }
 
-  if (readStringOption(options, 'storage-key') || readStringOption(options, 'download-url')) {
-    await publishRelease({
+  return manifest.expoConfig
+}
+
+// -----------------------------------------------------------------------------
+// Release commands
+// -----------------------------------------------------------------------------
+
+export async function handleUpload(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  const { api, project } = await resolveReleaseAccess(context, options)
+  const { outputDir, manifest, platform, nativeVersion, channel } = await resolveReleaseTupleFromManifest(context, options)
+  const file = await readBundleFile(outputDir)
+  const upload = await uploadReleaseArchive({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+    appId: project.appId,
+    platform,
+    channel,
+    nativeVersion,
+    bundleId: manifest.bundleId,
+    file,
+    expoConfig: resolveManifestExpoConfig(manifest),
+  })
+
+  console.log('')
+  console.log('Bundle uploaded.')
+  console.log('')
+  console.log(formatUploadSummary({
+    bundleId: manifest.bundleId,
+    platform,
+    channel,
+    nativeVersion,
+    upload,
+  }))
+}
+
+export async function handlePublish(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  const { api, project } = await resolveReleaseAccess(context, options)
+  const { outputDir, manifest, platform, nativeVersion, channel } = await resolveReleaseTupleFromManifest(context, options)
+  const mandatory = !readBooleanOption(options, 'optional', false)
+  const rolloutPercent = resolveRolloutPercent(options)
+  const releaseNotes = readStringOption(options, 'release-notes')
+  const storageKey = readStringOption(options, 'storage-key')
+  const downloadUrl = readStringOption(options, 'download-url')
+
+  if (storageKey && downloadUrl) {
+    throw new Error('Pass either --storage-key or --download-url, not both.')
+  }
+
+  if (storageKey || downloadUrl) {
+    const item = await publishRelease({
       apiUrl: api.apiUrl,
       apiKey: api.apiKey,
       appId: project.appId,
@@ -77,8 +205,9 @@ export async function handlePublish(context: CommandContext, options: Record<str
       mandatory,
       rolloutPercent,
       releaseNotes,
-      storageKey: readStringOption(options, 'storage-key'),
-      downloadUrl: readStringOption(options, 'download-url'),
+      storageKey,
+      downloadUrl,
+      expoConfig: resolveManifestExpoConfig(manifest),
     })
 
     console.log('')
@@ -93,11 +222,17 @@ export async function handlePublish(context: CommandContext, options: Record<str
       mandatory,
       releaseNotes,
     }))
+
+    if (item.storageKey || item.downloadUrl) {
+      console.log('')
+      console.log(`Source: ${item.storageKey ?? item.downloadUrl}`)
+    }
+
     return
   }
 
   const file = await readBundleFile(outputDir)
-  await createRelease({
+  const created = await createRelease({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
@@ -109,6 +244,7 @@ export async function handlePublish(context: CommandContext, options: Record<str
     rolloutPercent,
     releaseNotes,
     file,
+    expoConfig: resolveManifestExpoConfig(manifest),
   })
 
   console.log('')
@@ -123,36 +259,21 @@ export async function handlePublish(context: CommandContext, options: Record<str
     mandatory,
     releaseNotes,
   }))
+  console.log('')
+  console.log(formatUploadSummary({
+    bundleId: manifest.bundleId,
+    platform,
+    channel,
+    nativeVersion,
+    upload: created.upload,
+  }))
 }
 
-async function resolveDefaultNativeVersion(
+export async function handleRollback(
   context: CommandContext,
   options: Record<string, string | boolean>,
-  platform: MobilePlatform,
 ) {
-  const outputDir = path.resolve(
-    context.cwd,
-    readStringOption(options, 'output-dir') ?? '.otalan/bundle',
-  )
-  const manifest = await readBundleManifestIfExists(outputDir)
-
-  return readStringOption(options, 'native-version')
-    ?? resolveManifestDefaultNativeVersion(manifest, platform)
-    ?? await resolveProjectNativeVersion(context.cwd, platform).catch(async () => promptWithHint({
-      question: 'Native version',
-      hint: 'Exact native app version.',
-    }))
-}
-
-export async function handleRollback(context: CommandContext, options: Record<string, string | boolean>) {
-  const api = await resolveApiConfig(options)
-  const project = await resolveProject(context)
-  await assertReleaseContextMatchesConfig({
-    apiUrl: api.apiUrl,
-    apiKey: api.apiKey,
-    organizationSlug: project.organizationSlug,
-    projectSlug: project.projectSlug,
-  })
+  const { api, project } = await resolveReleaseAccess(context, options)
   const targetBundleId = readStringOption(options, 'bundle-id')
     ?? readStringOption(options, 'target-bundle-id')
     ?? await promptWithHint({
@@ -162,14 +283,8 @@ export async function handleRollback(context: CommandContext, options: Record<st
     })
   const platformFallback = readStringOption(options, 'platform')
     ? undefined
-    : await promptWithHint({
-      question: 'Platform',
-      hint: 'Target mobile platform: ios or android.',
-    }) as MobilePlatform
-  const platform = resolvePlatform(
-    options,
-    platformFallback,
-  )
+    : await promptPlatformChoice()
+  const platform = resolvePlatform(options, platformFallback)
   const nativeVersion = readStringOption(options, 'native-version')
     ?? await resolveDefaultNativeVersion(context, options, platform)
   const channel = readStringOption(options, 'channel') ?? await promptWithHint({
@@ -196,7 +311,7 @@ export async function handleRollback(context: CommandContext, options: Record<st
     throw new Error(`Bundle "${targetBundleId}" archive is unavailable and cannot be rolled back.`)
   }
 
-  await rollbackRelease({
+  const item = await rollbackRelease({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
@@ -210,37 +325,27 @@ export async function handleRollback(context: CommandContext, options: Record<st
   console.log('Rollback applied.')
   console.log('')
   console.log(formatBundleSummary({
-    bundleId: targetRelease.bundleId,
-    platform: targetRelease.platform,
-    channel: targetRelease.channel,
-    nativeVersion: targetRelease.nativeVersion,
-    rolloutPercent: targetRelease.rolloutPercent,
-    rolloutState: 'active',
-    releaseNotes: targetRelease.releaseNotes,
-    createdAt: targetRelease.createdAt,
-    selectable: true,
+    bundleId: item.bundleId,
+    platform: item.platform,
+    channel: item.channel,
+    nativeVersion: item.nativeVersion,
+    rolloutPercent: item.rolloutPercent,
+    rolloutState: item.rolloutState,
+    releaseNotes: item.releaseNotes,
+    createdAt: item.createdAt,
+    selectable: Boolean(item.resolvedDownloadUrl),
   }))
 }
 
-export async function handleStatus(context: CommandContext, options: Record<string, string | boolean>) {
-  const api = await resolveApiConfig(options)
-  const project = await resolveProject(context)
-  await assertReleaseContextMatchesConfig({
-    apiUrl: api.apiUrl,
-    apiKey: api.apiKey,
-    organizationSlug: project.organizationSlug,
-    projectSlug: project.projectSlug,
-  })
+export async function handleStatus(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  const { api, project } = await resolveReleaseAccess(context, options)
   const platformFallback = readStringOption(options, 'platform')
     ? undefined
-    : await promptWithHint({
-      question: 'Platform',
-      hint: 'Target mobile platform: ios or android.',
-    }) as MobilePlatform
-  const platform = resolvePlatform(
-    options,
-    platformFallback,
-  )
+    : await promptPlatformChoice()
+  const platform = resolvePlatform(options, platformFallback)
   const nativeVersion = readStringOption(options, 'native-version')
     ?? await resolveDefaultNativeVersion(context, options, platform)
   const channel = readStringOption(options, 'channel') ?? await promptWithHint({
@@ -257,7 +362,6 @@ export async function handleStatus(context: CommandContext, options: Record<stri
     channel,
     nativeVersion,
   })
-
   const active = releases.find(item => item.isActive) ?? null
 
   if (!active) {
@@ -280,25 +384,15 @@ export async function handleStatus(context: CommandContext, options: Record<stri
   }))
 }
 
-export async function handleBundlesList(context: CommandContext, options: Record<string, string | boolean>) {
-  const api = await resolveApiConfig(options)
-  const project = await resolveProject(context)
-  await assertReleaseContextMatchesConfig({
-    apiUrl: api.apiUrl,
-    apiKey: api.apiKey,
-    organizationSlug: project.organizationSlug,
-    projectSlug: project.projectSlug,
-  })
+export async function handleBundlesList(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  const { api, project } = await resolveReleaseAccess(context, options)
   const platformFallback = readStringOption(options, 'platform')
     ? undefined
-    : await promptWithHint({
-      question: 'Platform',
-      hint: 'Target mobile platform: ios or android.',
-    }) as MobilePlatform
-  const platform = resolvePlatform(
-    options,
-    platformFallback,
-  )
+    : await promptPlatformChoice()
+  const platform = resolvePlatform(options, platformFallback)
   const channel = readStringOption(options, 'channel') ?? await promptWithHint({
     question: 'Channel',
     fallback: 'production',

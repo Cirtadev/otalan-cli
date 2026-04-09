@@ -1,5 +1,9 @@
 import type { BundleIdSource } from '../bundle'
-import type { ReleaseListItem } from '../http'
+import type { ReleaseItem, UploadArtifact } from '../http'
+
+// -----------------------------------------------------------------------------
+// Generic output
+// -----------------------------------------------------------------------------
 
 export function printJson(value: unknown) {
   console.log(JSON.stringify(value, null, 2))
@@ -27,8 +31,10 @@ export function printHelp() {
     ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
     ['', '[--native-version 1.0.0] [--runtime-version 1.0.0]', ''],
+    ['upload', '[--output-dir .otalan/bundle] [--channel production]', 'Upload the current bundle archive without publishing it.'],
     ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Upload and publish the current bundle.'],
     ['', '[--release-notes "..."] [--optional] [--rollout-percent 100]', ''],
+    ['', '[--storage-key ...] [--download-url ...]', ''],
     ['bundles', '[--platform ios|android]', 'List published bundles for a release tuple.'],
     ['', '[--channel production] [--native-version 1.0.0]', ''],
     ['rollback', '--bundle-id ... [--platform ios|android]', 'Reactivate a published bundle.'],
@@ -40,7 +46,8 @@ export function printHelp() {
     'Use a CI key with the CLI.',
     'Get CI keys from https://otalan.com/api-keys.',
     'Build web assets before running `otalan bundle` for Capacitor projects.',
-    'Run `otalan login` before publish, rollback, status, or bundles.',
+    'Use `upload` when you want a managed storage key before publishing.',
+    'Run `otalan login` before upload, publish, rollback, status, or bundles.',
   ] as const
   const commandWidth = 12
 
@@ -76,6 +83,10 @@ export function printHelp() {
   console.log('')
   console.log('Run `otalan <command> --help` to show this help text.')
 }
+
+// -----------------------------------------------------------------------------
+// Release summaries
+// -----------------------------------------------------------------------------
 
 export function formatBundleSummary(input: {
   bundleId: string
@@ -143,11 +154,34 @@ export function formatPublishSummary(input: {
   return lines.join('\n')
 }
 
+export function formatUploadSummary(input: {
+  bundleId: string
+  platform: string
+  channel: string
+  nativeVersion: string
+  upload: UploadArtifact
+}) {
+  return [
+    `Bundle ID: ${input.bundleId}`,
+    `Platform: ${input.platform}`,
+    `Channel: ${input.channel}`,
+    `Native version: ${input.nativeVersion}`,
+    `Storage key: ${input.upload.storageKey}`,
+    `Checksum: ${input.upload.checksum}`,
+    `Size: ${input.upload.fileSizeBytes} bytes`,
+    `Download URL: ${input.upload.downloadUrl}`,
+  ].join('\n')
+}
+
 function formatCell(value: string, width: number) {
   return value.length >= width ? value.slice(0, width) : value.padEnd(width, ' ')
 }
 
-export function printBundlesTable(items: ReleaseListItem[]) {
+// -----------------------------------------------------------------------------
+// Tables
+// -----------------------------------------------------------------------------
+
+export function printBundlesTable(items: ReleaseItem[]) {
   const rows = items.map(item => [
     item.isActive ? 'yes' : 'no',
     item.resolvedDownloadUrl ? 'yes' : 'no',

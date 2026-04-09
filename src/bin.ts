@@ -5,7 +5,11 @@ import type { CommandContext } from './cli/helpers'
 import { printHelp } from './cli/output'
 import { handleInit, handleLogin } from './commands/auth'
 import { handleBundle } from './commands/bundle'
-import { handleBundlesList, handlePublish, handleRollback, handleStatus } from './commands/release'
+import { handleBundlesList, handlePublish, handleRollback, handleStatus, handleUpload } from './commands/release'
+
+// -----------------------------------------------------------------------------
+// Entrypoint
+// -----------------------------------------------------------------------------
 
 async function main() {
   const parsed = parseArgs(process.argv.slice(2))
@@ -30,6 +34,9 @@ async function main() {
       return
     case 'publish':
       await handlePublish(context, parsed.options)
+      return
+    case 'upload':
+      await handleUpload(context, parsed.options)
       return
     case 'rollback':
       await handleRollback(context, parsed.options)
@@ -57,6 +64,10 @@ async function main() {
       throw new Error(`Unknown command: ${parsed.command}`)
   }
 }
+
+// -----------------------------------------------------------------------------
+// Process bootstrap
+// -----------------------------------------------------------------------------
 
 ;(async () => {
   try {

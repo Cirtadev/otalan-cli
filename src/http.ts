@@ -1,20 +1,26 @@
+import type { MobilePlatform } from './config'
+
 // -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
 
-export type ReleaseListItem = {
+export type ReleaseItem = {
   id: string
+  projectId: string
   appId: string
-  platform: 'ios' | 'android'
+  platform: MobilePlatform
   channel: string
   nativeVersion: string
   bundleId: string
-  storageObjectExists: boolean
+  storageKey: string | null
+  downloadUrl: string | null
   checksum: string | null
   mandatory: boolean
   rolloutPercent: number
   rolloutState: string
   releaseNotes: string | null
+  fileSizeBytes: number | null
+  storageObjectExists: boolean
   isActive: boolean
   createdAt: string
   resolvedDownloadUrl: string | null
@@ -29,11 +35,48 @@ export type ReleaseContext = {
   projectSlug: string
 }
 
+export type UploadArtifact = {
+  storageKey: string
+  checksum: string
+  fileSizeBytes: number
+  downloadUrl: string
+}
+
+type ReleaseClientConfig = {
+  apiUrl: string
+  apiKey: string
+}
+
+type ReleaseIdentity = {
+  appId: string
+  platform: MobilePlatform
+  channel: string
+  nativeVersion: string
+  bundleId: string
+}
+
+type ReleasePublishMetadata = {
+  mandatory: boolean
+  rolloutPercent: number
+  releaseNotes?: string
+}
+
+type ReleasePublishSource = {
+  storageKey?: string
+  downloadUrl?: string
+  checksum?: string
+  expoConfig?: JsonObject
+}
+
 type JsonObject = Record<string, unknown>
 
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
+
+function normalizeApiUrl(apiUrl: string) {
+  return apiUrl.replace(/\/+$/, '')
+}
 
 function buildHeaders(apiKey: string, extra?: HeadersInit) {
   return {
@@ -60,22 +103,57 @@ async function assertResponseOk(response: Response) {
   throw new Error(message)
 }
 
+async function requestJson<T>(input: {
+  apiUrl: string
+  apiKey: string
+  path: string
+  method?: 'GET' | 'POST'
+  query?: Record<string, string | undefined>
+  body?: unknown
+}) {
+  const url = new URL(`${normalizeApiUrl(input.apiUrl)}${input.path}`)
+
+  for (const [key, value] of Object.entries(input.query ?? {})) {
+    if (value) {
+      url.searchParams.set(key, value)
+    }
+  }
+
+  const response = await fetch(url, {
+    method: input.method ?? 'GET',
+    headers: input.body
+      ? buildHeaders(input.apiKey, { 'Content-Type': 'application/json' })
+      : buildHeaders(input.apiKey),
+    body: input.body ? JSON.stringify(input.body) : undefined,
+  })
+
+  await assertResponseOk(response)
+  return response.json() as Promise<T>
+}
+
+async function requestForm<T>(input: {
+  apiUrl: string
+  apiKey: string
+  path: string
+  formData: FormData
+}) {
+  const response = await fetch(`${normalizeApiUrl(input.apiUrl)}${input.path}`, {
+    method: 'POST',
+    headers: buildHeaders(input.apiKey),
+    body: input.formData,
+  })
+
+  await assertResponseOk(response)
+  return response.json() as Promise<T>
+}
+
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
 
-export async function createRelease(input: {
-  apiUrl: string
-  apiKey: string
-  appId: string
-  platform: 'ios' | 'android'
-  channel: string
-  nativeVersion: string
-  bundleId: string
-  mandatory: boolean
-  rolloutPercent: number
-  releaseNotes?: string
+export async function createRelease(input: ReleaseClientConfig & ReleaseIdentity & ReleasePublishMetadata & {
   file: File
+  expoConfig?: JsonObject
 }) {
   const formData = new FormData()
 
@@ -91,52 +169,70 @@ export async function createRelease(input: {
     formData.set('releaseNotes', input.releaseNotes)
   }
 
+  if (input.expoConfig) {
+    formData.set('expoConfig', JSON.stringify(input.expoConfig))
+  }
+
   formData.set('file', input.file)
 
-  const response = await fetch(`${input.apiUrl.replace(/\/+$/, '')}/v1/releases/create`, {
-    method: 'POST',
-    headers: buildHeaders(input.apiKey),
-    body: formData,
+  return requestForm<{
+    item: ReleaseItem
+    upload: UploadArtifact
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/create',
+    formData,
   })
-
-  await assertResponseOk(response)
-  return parseJson(response)
 }
 
-export async function getReleaseContext(input: {
-  apiUrl: string
-  apiKey: string
+export async function uploadReleaseArchive(input: ReleaseClientConfig & ReleaseIdentity & {
+  file: File
+  expoConfig?: JsonObject
 }) {
-  const response = await fetch(`${input.apiUrl.replace(/\/+$/, '')}/v1/releases/context`, {
-    headers: buildHeaders(input.apiKey),
-  })
+  const formData = new FormData()
 
-  await assertResponseOk(response)
-  const payload = await parseJson(response)
-  return payload.item as ReleaseContext
+  formData.set('appId', input.appId)
+  formData.set('platform', input.platform)
+  formData.set('channel', input.channel)
+  formData.set('nativeVersion', input.nativeVersion)
+  formData.set('bundleId', input.bundleId)
+
+  if (input.expoConfig) {
+    formData.set('expoConfig', JSON.stringify(input.expoConfig))
+  }
+
+  formData.set('file', input.file)
+
+  return requestForm<UploadArtifact>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/upload',
+    formData,
+  })
 }
 
-export async function publishRelease(input: {
-  apiUrl: string
-  apiKey: string
-  appId: string
-  platform: 'ios' | 'android'
-  channel: string
-  nativeVersion: string
-  bundleId: string
-  checksum: string
-  mandatory: boolean
-  rolloutPercent: number
-  releaseNotes?: string
-  storageKey?: string
-  downloadUrl?: string
-}) {
-  const response = await fetch(`${input.apiUrl.replace(/\/+$/, '')}/v1/releases/publish`, {
+export async function getReleaseContext(input: ReleaseClientConfig) {
+  const payload = await requestJson<{
+    item: ReleaseContext
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/context',
+  })
+
+  return payload.item
+}
+
+export async function publishRelease(input: ReleaseClientConfig & ReleaseIdentity & ReleasePublishMetadata & ReleasePublishSource) {
+  const payload = await requestJson<{
+    item: ReleaseItem
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/publish',
     method: 'POST',
-    headers: buildHeaders(input.apiKey, {
-      'Content-Type': 'application/json',
-    }),
-    body: JSON.stringify({
+    body: {
       appId: input.appId,
       platform: input.platform,
       channel: input.channel,
@@ -148,63 +244,60 @@ export async function publishRelease(input: {
       releaseNotes: input.releaseNotes,
       storageKey: input.storageKey,
       downloadUrl: input.downloadUrl,
-    }),
+      expoConfig: input.expoConfig,
+    },
   })
 
-  await assertResponseOk(response)
-  return parseJson(response)
+  return payload.item
 }
 
-export async function rollbackRelease(input: {
-  apiUrl: string
-  apiKey: string
+export async function rollbackRelease(input: ReleaseClientConfig & {
   appId: string
-  platform: 'ios' | 'android'
+  platform: MobilePlatform
   channel: string
   nativeVersion: string
   targetBundleId: string
 }) {
-  const response = await fetch(`${input.apiUrl.replace(/\/+$/, '')}/v1/releases/rollback`, {
+  const payload = await requestJson<{
+    item: ReleaseItem
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/rollback',
     method: 'POST',
-    headers: buildHeaders(input.apiKey, {
-      'Content-Type': 'application/json',
-    }),
-    body: JSON.stringify(input),
+    body: {
+      appId: input.appId,
+      platform: input.platform,
+      channel: input.channel,
+      nativeVersion: input.nativeVersion,
+      targetBundleId: input.targetBundleId,
+    },
   })
 
-  await assertResponseOk(response)
-  return parseJson(response)
+  return payload.item
 }
 
-export async function listReleases(input: {
-  apiUrl: string
-  apiKey: string
+export async function listReleases(input: ReleaseClientConfig & {
   appId: string
-  platform?: 'ios' | 'android'
+  platform?: MobilePlatform
   channel?: string
   nativeVersion?: string
+  bundleId?: string
 }) {
-  const url = new URL(`${input.apiUrl.replace(/\/+$/, '')}/v1/releases`)
-
-  url.searchParams.set('appId', input.appId)
-
-  if (input.platform) {
-    url.searchParams.set('platform', input.platform)
-  }
-
-  if (input.channel) {
-    url.searchParams.set('channel', input.channel)
-  }
-
-  if (input.nativeVersion) {
-    url.searchParams.set('nativeVersion', input.nativeVersion)
-  }
-
-  const response = await fetch(url, {
-    headers: buildHeaders(input.apiKey),
+  const payload = await requestJson<{
+    items: ReleaseItem[]
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases',
+    query: {
+      appId: input.appId,
+      platform: input.platform,
+      channel: input.channel,
+      nativeVersion: input.nativeVersion,
+      bundleId: input.bundleId,
+    },
   })
 
-  await assertResponseOk(response)
-  const payload = await parseJson(response)
-  return (payload.items ?? []) as ReleaseListItem[]
+  return payload.items
 }
