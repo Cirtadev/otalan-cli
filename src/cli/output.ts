@@ -27,7 +27,7 @@ export function printHelp() {
     ['help', '', 'Show help.'],
     ['login', '[--api-key ...] [--api-url ...]', 'Save the CI key and API URL locally.'],
     ['init', '[--app-id ...]', 'Create otalan.config.json and link this repo to an app.'],
-    ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json. Default bundle IDs use nativeVersion with a hash suffix.'],
+    ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo/React Native apps.'],
     ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
     ['', '[--native-version 1.0.0] [--runtime-version 1.0.0]', ''],
@@ -46,6 +46,7 @@ export function printHelp() {
     'Use a CI key with the CLI.',
     'Get CI keys from https://otalan.com/api-keys.',
     'Build web assets before running `otalan bundle` for Capacitor projects.',
+    'Use `--target expo` for Expo and React Native apps that ship OTA updates through Expo export.',
     'Use `upload` when you want a managed storage key before publishing.',
     'Run `otalan login` before upload, publish, rollback, status, or bundles.',
   ] as const

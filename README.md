@@ -1,35 +1,176 @@
 # `@otalan/cli`
 
-Otalan CLI for bundling and publishing OTA updates.
+Otalan CLI for bundling and publishing OTA updates for Capacitor and Expo / React Native apps.
 
-## What It Does
+Published as an npm package, but the CLI itself runs on Bun.
 
-- logs into the Otalan API
-- links the current repo to an Otalan app
-- bundles Capacitor or Expo web output
-- uploads a bundle archive to managed storage
-- publishes a bundle
-- lists published bundles
-- rolls back to an older bundle
-- shows current bundle status
+## Requirements
 
-## Key Requirement
-
-The CLI uses the **CI key**.
+- Bun `>= 1.3.11` installed and available on your `PATH`
+- An Otalan **CI key**
 
 Do not use the OTA app key in the CLI.
 
 ## Install
 
+Recommended:
+
 ```bash
 bun add -g @otalan/cli
 ```
 
-Or run it locally from this repo:
+If you install the package with `npm`, `pnpm`, or `yarn`, `bun` still needs to be installed because the executable runs with `#!/usr/bin/env bun`.
+
+Local development from this repo:
 
 ```bash
 bun ./src/bin.ts help
 ```
+
+## Quick Start
+
+### Capacitor
+
+1. Log in with your CI key:
+
+```bash
+otalan login --api-key otalan_ci_xxx
+```
+
+2. Link the current repo to your Otalan app:
+
+```bash
+otalan init --app-id com.example.app
+```
+
+3. Build your web assets with your app's normal build command.
+
+4. Bundle the OTA payload:
+
+```bash
+otalan bundle --target capacitor --platform ios --bundle-id 1.0.5
+```
+
+5. Publish it:
+
+```bash
+otalan publish --channel production
+```
+
+`otalan bundle --target capacitor` packages the built web assets from `dist/` or `www/`, so your app build must run first.
+
+### Expo / React Native
+
+1. Log in with your CI key:
+
+```bash
+otalan login --api-key otalan_ci_xxx
+```
+
+2. Link the current repo to your Otalan app:
+
+```bash
+otalan init --app-id com.example.app
+```
+
+3. Bundle the OTA payload:
+
+```bash
+otalan bundle --target expo --platform ios --bundle-id 1.0.5
+```
+
+4. Publish it:
+
+```bash
+otalan publish --channel production
+```
+
+`otalan bundle --target expo` runs `bunx expo export`, packages the exported JS bundle and assets, and stores the resolved Expo config in the Otalan manifest for publish/upload.
+
+## CI/CD Usage
+
+The CLI is designed to work well in CI/CD with a project-scoped Otalan CI key.
+
+Set these secrets in your CI provider:
+
+- `OTALAN_API_KEY`
+- `OTALAN_APP_ID`
+
+Optional:
+
+- `OTALAN_API_URL`
+
+### CI/CD Example: Capacitor
+
+```bash
+bun install --frozen-lockfile
+bun run build
+otalan login --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://api.otalan.com}"
+otalan init --app-id "$OTALAN_APP_ID"
+otalan bundle --target capacitor --platform ios --bundle-from-package
+otalan publish --channel production
+```
+
+Use your normal app build command before `otalan bundle`. The CLI then packages the built web output from `dist/` or `www/`.
+
+### CI/CD Example: Expo / React Native
+
+```bash
+bun install --frozen-lockfile
+otalan login --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://api.otalan.com}"
+otalan init --app-id "$OTALAN_APP_ID"
+otalan bundle --target expo --platform ios --bundle-from-package
+otalan publish --channel production
+```
+
+This runs `bunx expo export` through the CLI, packages the exported OTA assets, and publishes the resulting bundle.
+
+### GitHub Actions Example
+
+```yaml
+name: Publish OTA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-ios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - run: bun install --frozen-lockfile
+      - run: bun add -g @otalan/cli
+      - run: bun run build
+      - run: otalan login --api-key "$OTALAN_API_KEY"
+        env:
+          OTALAN_API_KEY: ${{ secrets.OTALAN_API_KEY }}
+      - run: otalan init --app-id "$OTALAN_APP_ID"
+        env:
+          OTALAN_APP_ID: ${{ secrets.OTALAN_APP_ID }}
+      - run: otalan bundle --target capacitor --platform ios --bundle-from-package
+      - run: otalan publish --channel production
+```
+
+Adjust the build step and bundle target for your app:
+
+- Capacitor: keep your web build step and use `--target capacitor`
+- Expo / React Native: remove the web build step if not needed and use `--target expo`
+
+## What It Does
+
+- logs into the Otalan API
+- links the current repo to an Otalan app
+- bundles Capacitor or Expo / React Native OTA output
+- uploads a bundle archive to managed storage
+- publishes a bundle
+- lists published bundles
+- rolls back to an older bundle
+- shows current bundle status
 
 ## Config Files
 
@@ -57,7 +198,7 @@ Example project config:
 
 `otalan.config.json` only links the repo to an Otalan project/app. Bundle and release targeting data such as `target`, `platform`, `nativeVersion`, and `bundleId` live in `.otalan/bundle/manifest.json`.
 
-## Commands
+## Command Reference
 
 ### `otalan help`
 
@@ -100,7 +241,7 @@ Capacitor:
 otalan bundle --target capacitor --platform ios
 ```
 
-Expo:
+Expo / React Native:
 
 ```bash
 otalan bundle --target expo --platform ios
@@ -220,7 +361,7 @@ otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
 
 ### `otalan status`
 
-Shows the active bundle plus matching bundle history.
+Shows the active bundle for the selected release tuple.
 
 `status` also uses the same native-version default order as `bundles`.
 
@@ -268,8 +409,8 @@ otalan status --platform ios --channel production
 
 ## Notes
 
-- The CLI is Bun-first.
-- Expo bundling uses `bunx expo ...`.
+- This is a Bun-based CLI published on npm.
+- Expo / React Native bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
 - Local development API URL is `http://localhost:8787`.
 - Publishing, rollback, status, and `bundles` expect a CI key.

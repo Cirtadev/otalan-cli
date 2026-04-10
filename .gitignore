@@ -1,2 +1,6 @@
 node_modules/
 .otalan/
+.DS_Store
+*.tgz
+dist/*
+!dist/bin.js

@@ -637,6 +637,19 @@ async function buildExpoAssetManifest(exportDir: string) {
 }
 
 // -----------------------------------------------------------------------------
+// Test helpers
+// -----------------------------------------------------------------------------
+
+export const bundleTestUtils = {
+  normalizeBundleId,
+  createAutoBundleId,
+  resolveBundleId,
+  resolveExpoNativeVersion,
+  resolveExpoRuntimeVersion,
+  findRuntimeVersionInObject,
+}
+
+// -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
 

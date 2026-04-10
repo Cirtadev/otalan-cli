@@ -17,7 +17,7 @@ async function main() {
     cwd: process.cwd(),
   }
 
-  if (parsed.options.help === true && parsed.command !== 'login' && parsed.command !== 'init') {
+  if (parsed.options.help === true) {
     printHelp()
     return
   }
