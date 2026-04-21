@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { parseArgs, readBooleanOption, readStringOption } from './args'
+import { parseArgs, readBooleanOption, readStringOption } from '../../src/cli/args'
 
 // -----------------------------------------------------------------------------
 // parseArgs

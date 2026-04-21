@@ -32,6 +32,25 @@ async function runCli(args: string[]) {
 }
 
 describe('CLI help', () => {
+  test('help reflects the publish-only release workflow', async () => {
+    const result = await runCli(['help'])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('Publish the current bundle ZIP with rollout metadata.')
+    expect(result.stdout).not.toContain('upload')
+    expect(result.stdout).not.toContain('--storage-key')
+    expect(result.stdout).not.toContain('--download-url')
+    expect(result.stderr).toBe('')
+  })
+
+  test('upload is rejected as an unknown command', async () => {
+    const result = await runCli(['upload'])
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('Unknown command: upload')
+  })
+
   test('login --help prints help text without triggering login prompts', async () => {
     const result = await runCli(['login', '--help'])
 

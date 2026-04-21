@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { BundleManifest } from '../../src/bundle'
 import {
   resolveApiKeysUrl,
   resolveManifestDefaultNativeVersion,
@@ -7,8 +8,7 @@ import {
   resolveManifestPlatform,
   resolvePlatform,
   resolveTarget,
-} from './helpers'
-import type { BundleManifest } from '../bundle'
+} from '../../src/cli/helpers'
 
 // -----------------------------------------------------------------------------
 // Fixtures

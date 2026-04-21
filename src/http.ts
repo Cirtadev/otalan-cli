@@ -26,6 +26,8 @@ export type ReleaseItem = {
   resolvedDownloadUrl: string | null
 }
 
+type JsonObject = Record<string, unknown>
+
 export type ReleaseContext = {
   organizationId: string
   organizationName: string
@@ -35,11 +37,22 @@ export type ReleaseContext = {
   projectSlug: string
 }
 
-export type UploadArtifact = {
-  storageKey: string
-  checksum: string
+export type BundleIngestItem = {
+  id: string
+  appId: string
+  platform: MobilePlatform
+  channel: string
+  nativeVersion: string
+  bundleId: string
+  status: string
+  failureReason: string | null
+  checksum: string | null
+  mandatory: boolean
+  rolloutPercent: number
+  releaseNotes: string | null
   fileSizeBytes: number
-  downloadUrl: string
+  processedAt: string | null
+  createdAt: string
 }
 
 type ReleaseClientConfig = {
@@ -60,15 +73,6 @@ type ReleasePublishMetadata = {
   rolloutPercent: number
   releaseNotes?: string
 }
-
-type ReleasePublishSource = {
-  storageKey?: string
-  downloadUrl?: string
-  checksum?: string
-  expoConfig?: JsonObject
-}
-
-type JsonObject = Record<string, unknown>
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -175,41 +179,16 @@ export async function createRelease(input: ReleaseClientConfig & ReleaseIdentity
 
   formData.set('file', input.file)
 
-  return requestForm<{
-    item: ReleaseItem
-    upload: UploadArtifact
+  const payload = await requestForm<{
+    item: BundleIngestItem
   }>({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
     path: '/v1/releases/create',
     formData,
   })
-}
 
-export async function uploadReleaseArchive(input: ReleaseClientConfig & ReleaseIdentity & {
-  file: File
-  expoConfig?: JsonObject
-}) {
-  const formData = new FormData()
-
-  formData.set('appId', input.appId)
-  formData.set('platform', input.platform)
-  formData.set('channel', input.channel)
-  formData.set('nativeVersion', input.nativeVersion)
-  formData.set('bundleId', input.bundleId)
-
-  if (input.expoConfig) {
-    formData.set('expoConfig', JSON.stringify(input.expoConfig))
-  }
-
-  formData.set('file', input.file)
-
-  return requestForm<UploadArtifact>({
-    apiUrl: input.apiUrl,
-    apiKey: input.apiKey,
-    path: '/v1/releases/upload',
-    formData,
-  })
+  return payload.item
 }
 
 export async function getReleaseContext(input: ReleaseClientConfig) {
@@ -224,28 +203,15 @@ export async function getReleaseContext(input: ReleaseClientConfig) {
   return payload.item
 }
 
-export async function publishRelease(input: ReleaseClientConfig & ReleaseIdentity & ReleasePublishMetadata & ReleasePublishSource) {
+export async function getReleaseIngest(input: ReleaseClientConfig & {
+  ingestId: string
+}) {
   const payload = await requestJson<{
-    item: ReleaseItem
+    item: BundleIngestItem
   }>({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
-    path: '/v1/releases/publish',
-    method: 'POST',
-    body: {
-      appId: input.appId,
-      platform: input.platform,
-      channel: input.channel,
-      nativeVersion: input.nativeVersion,
-      bundleId: input.bundleId,
-      checksum: input.checksum,
-      mandatory: input.mandatory,
-      rolloutPercent: input.rolloutPercent,
-      releaseNotes: input.releaseNotes,
-      storageKey: input.storageKey,
-      downloadUrl: input.downloadUrl,
-      expoConfig: input.expoConfig,
-    },
+    path: `/v1/releases/ingests/${encodeURIComponent(input.ingestId)}`,
   })
 
   return payload.item

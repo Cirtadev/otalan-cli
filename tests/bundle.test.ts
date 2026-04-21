@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { bundleTestUtils } from './bundle'
+import { bundleTestUtils } from '../src/bundle'
 
 // -----------------------------------------------------------------------------
 // bundle IDs

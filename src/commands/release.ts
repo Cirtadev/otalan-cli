@@ -18,18 +18,18 @@ import {
 } from '../cli/helpers'
 import {
   formatBundleSummary,
+  formatIngestSummary,
   formatPublishSummary,
-  formatUploadSummary,
   printBundlesTable,
 } from '../cli/output'
 import { promptSelectWithHint, promptWithHint } from '../cli/prompts'
 import type { MobilePlatform } from '../config'
 import {
+  type BundleIngestItem,
   createRelease,
+  getReleaseIngest,
   listReleases,
-  publishRelease,
   rollbackRelease,
-  uploadReleaseArchive,
 } from '../http'
 
 // -----------------------------------------------------------------------------
@@ -40,6 +40,8 @@ const PLATFORM_OPTIONS = [
   { label: 'ios', value: 'ios' },
   { label: 'android', value: 'android' },
 ] as const satisfies ReadonlyArray<{ label: string, value: MobilePlatform }>
+const INGEST_POLL_INTERVAL_MS = 2_000
+const INGEST_WAIT_TIMEOUT_MS = 10 * 60_000
 
 async function resolveReleaseAccess(
   context: CommandContext,
@@ -141,40 +143,48 @@ function resolveManifestExpoConfig(manifest: BundleManifest) {
   return manifest.expoConfig
 }
 
+function isTerminalIngestStatus(status: string) {
+  return status === 'ready' || status === 'failed'
+}
+
+async function waitForReleaseIngest(input: {
+  ingest: BundleIngestItem
+  loadIngest: (ingestId: string) => Promise<BundleIngestItem>
+  onStatusChange?: (ingest: BundleIngestItem) => void
+  pollIntervalMs?: number
+  timeoutMs?: number
+  sleep?: (ms: number) => Promise<void>
+  now?: () => number
+}) {
+  const pollIntervalMs = input.pollIntervalMs ?? INGEST_POLL_INTERVAL_MS
+  const timeoutMs = input.timeoutMs ?? INGEST_WAIT_TIMEOUT_MS
+  const sleep = input.sleep ?? Bun.sleep
+  const now = input.now ?? Date.now
+  const startedAt = now()
+  let ingest = input.ingest
+
+  while (!isTerminalIngestStatus(ingest.status)) {
+    if (now() - startedAt >= timeoutMs) {
+      throw new Error(`Timed out waiting for release validation. Ingest ${ingest.id} is still ${ingest.status}.`)
+    }
+
+    await sleep(pollIntervalMs)
+
+    const nextIngest = await input.loadIngest(ingest.id)
+
+    if (nextIngest.status !== ingest.status) {
+      input.onStatusChange?.(nextIngest)
+    }
+
+    ingest = nextIngest
+  }
+
+  return ingest
+}
+
 // -----------------------------------------------------------------------------
 // Release commands
 // -----------------------------------------------------------------------------
-
-export async function handleUpload(
-  context: CommandContext,
-  options: Record<string, string | boolean>,
-) {
-  const { api, project } = await resolveReleaseAccess(context, options)
-  const { outputDir, manifest, platform, nativeVersion, channel } = await resolveReleaseTupleFromManifest(context, options)
-  const file = await readBundleFile(outputDir)
-  const upload = await uploadReleaseArchive({
-    apiUrl: api.apiUrl,
-    apiKey: api.apiKey,
-    appId: project.appId,
-    platform,
-    channel,
-    nativeVersion,
-    bundleId: manifest.bundleId,
-    file,
-    expoConfig: resolveManifestExpoConfig(manifest),
-  })
-
-  console.log('')
-  console.log('Bundle uploaded.')
-  console.log('')
-  console.log(formatUploadSummary({
-    bundleId: manifest.bundleId,
-    platform,
-    channel,
-    nativeVersion,
-    upload,
-  }))
-}
 
 export async function handlePublish(
   context: CommandContext,
@@ -185,54 +195,8 @@ export async function handlePublish(
   const mandatory = !readBooleanOption(options, 'optional', false)
   const rolloutPercent = resolveRolloutPercent(options)
   const releaseNotes = readStringOption(options, 'release-notes')
-  const storageKey = readStringOption(options, 'storage-key')
-  const downloadUrl = readStringOption(options, 'download-url')
-
-  if (storageKey && downloadUrl) {
-    throw new Error('Pass either --storage-key or --download-url, not both.')
-  }
-
-  if (storageKey || downloadUrl) {
-    const item = await publishRelease({
-      apiUrl: api.apiUrl,
-      apiKey: api.apiKey,
-      appId: project.appId,
-      platform,
-      channel,
-      nativeVersion,
-      bundleId: manifest.bundleId,
-      checksum: manifest.hash,
-      mandatory,
-      rolloutPercent,
-      releaseNotes,
-      storageKey,
-      downloadUrl,
-      expoConfig: resolveManifestExpoConfig(manifest),
-    })
-
-    console.log('')
-    console.log('Release published.')
-    console.log('')
-    console.log(formatPublishSummary({
-      bundleId: manifest.bundleId,
-      platform,
-      channel,
-      nativeVersion,
-      rolloutPercent,
-      mandatory,
-      releaseNotes,
-    }))
-
-    if (item.storageKey || item.downloadUrl) {
-      console.log('')
-      console.log(`Source: ${item.storageKey ?? item.downloadUrl}`)
-    }
-
-    return
-  }
-
   const file = await readBundleFile(outputDir)
-  const created = await createRelease({
+  const ingest = await createRelease({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
@@ -247,8 +211,6 @@ export async function handlePublish(
     expoConfig: resolveManifestExpoConfig(manifest),
   })
 
-  console.log('')
-  console.log('Release published.')
   console.log('')
   console.log(formatPublishSummary({
     bundleId: manifest.bundleId,
@@ -260,12 +222,38 @@ export async function handlePublish(
     releaseNotes,
   }))
   console.log('')
-  console.log(formatUploadSummary({
-    bundleId: manifest.bundleId,
-    platform,
-    channel,
-    nativeVersion,
-    upload: created.upload,
+  console.log(formatIngestSummary({
+    ingest,
+  }))
+  console.log('')
+  console.log('Waiting for validation...')
+
+  const completedIngest = await waitForReleaseIngest({
+    ingest,
+    loadIngest: ingestId =>
+      getReleaseIngest({
+        apiUrl: api.apiUrl,
+        apiKey: api.apiKey,
+        ingestId,
+      }),
+    onStatusChange: nextIngest => {
+      console.log(`Ingest status: ${nextIngest.status}`)
+    },
+  })
+
+  if (completedIngest.status === 'failed') {
+    if (completedIngest.failureReason) {
+      throw new Error(`Release validation failed for ingest ${completedIngest.id}: ${completedIngest.failureReason}`)
+    }
+
+    throw new Error(`Release validation failed for ingest ${completedIngest.id}.`)
+  }
+
+  console.log('')
+  console.log('Release published.')
+  console.log('')
+  console.log(formatIngestSummary({
+    ingest: completedIngest,
   }))
 }
 
@@ -411,4 +399,13 @@ export async function handleBundlesList(
   })
 
   printBundlesTable(releases)
+}
+
+// -----------------------------------------------------------------------------
+// Test helpers
+// -----------------------------------------------------------------------------
+
+export const releaseTestUtils = {
+  isTerminalIngestStatus,
+  waitForReleaseIngest,
 }

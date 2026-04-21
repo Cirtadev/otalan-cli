@@ -1,6 +1,6 @@
 # `@otalan/cli`
 
-Otalan CLI for bundling and publishing OTA updates for Capacitor and Expo / React Native apps.
+Otalan CLI for bundling and publishing OTA update releases for Capacitor and Expo / React Native apps.
 
 Published as an npm package, but the CLI itself runs on Bun.
 
@@ -51,13 +51,14 @@ otalan init --app-id com.example.app
 otalan bundle --target capacitor --platform ios --bundle-id 1.0.5
 ```
 
-5. Publish it:
+5. Publish the release:
 
 ```bash
 otalan publish --channel production
 ```
 
 `otalan bundle --target capacitor` packages the built web assets from `dist/` or `www/`, so your app build must run first.
+`otalan publish` waits for server-side validation to finish before it returns.
 
 ### Expo / React Native
 
@@ -79,13 +80,14 @@ otalan init --app-id com.example.app
 otalan bundle --target expo --platform ios --bundle-id 1.0.5
 ```
 
-4. Publish it:
+4. Publish the release:
 
 ```bash
 otalan publish --channel production
 ```
 
-`otalan bundle --target expo` runs `bunx expo export`, packages the exported JS bundle and assets, and stores the resolved Expo config in the Otalan manifest for publish/upload.
+`otalan bundle --target expo` runs `bunx expo export`, packages the exported JS bundle and assets, and stores the resolved Expo config in the Otalan manifest for publish.
+`otalan publish` waits for server-side validation to finish before it returns.
 
 ## CI/CD Usage
 
@@ -123,7 +125,7 @@ otalan bundle --target expo --platform ios --bundle-from-package
 otalan publish --channel production
 ```
 
-This runs `bunx expo export` through the CLI, packages the exported OTA assets, and publishes the resulting bundle.
+This runs `bunx expo export` through the CLI, packages the exported OTA assets, and publishes the resulting bundle through Otalan's validation pipeline.
 
 ### GitHub Actions Example
 
@@ -166,11 +168,12 @@ Adjust the build step and bundle target for your app:
 - logs into the Otalan API
 - links the current repo to an Otalan app
 - bundles Capacitor or Expo / React Native OTA output
-- uploads a bundle archive to managed storage
-- publishes a bundle
+- publishes a bundle with rollout metadata
 - lists published bundles
 - rolls back to an older bundle
 - shows current bundle status
+
+The CLI supports one release write path: `otalan publish`. There is no separate `upload` command.
 
 ## Config Files
 
@@ -252,7 +255,7 @@ Current behavior:
 - Build your Capacitor web assets before running `otalan bundle`
 - Capacitor reads `dist/` or `www/`
 - Expo runs `bunx expo export --platform <platform>`
-- Expo stores the resolved Expo app config in `.otalan/bundle/manifest.json` so publish/upload can forward it for `extra.expoClient`
+- Expo stores the resolved Expo app config in `.otalan/bundle/manifest.json` so publish can forward it for `extra.expoClient`
 - both outputs produce a ZIP plus `manifest.json`
 - `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
 
@@ -264,7 +267,7 @@ Native version defaults:
 - Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings
 - `--native-version` overrides auto-detection
 
-Choose the bundle ID you want to publish:
+Choose the bundle ID you want to release:
 
 ```bash
 otalan bundle --target capacitor --platform ios --bundle-id 1.0.5
@@ -286,16 +289,17 @@ otalan bundle --target capacitor --platform ios --bundle-from-package
 
 ### `otalan publish`
 
-Publishes the current bundle output.
+Publishes the current bundle output with rollout metadata.
 
-`otalan publish` uses the `bundleId`, `platform`, and `nativeVersion` already stored in `.otalan/bundle/manifest.json`. To publish `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
+`otalan publish` uses the `bundleId`, `platform`, and `nativeVersion` already stored in `.otalan/bundle/manifest.json`. To release `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
 
 Current behavior:
 
 - `channel` is chosen at publish time
 - `--platform` and `--native-version` can override the manifest, but only if they match it
 - `--output-dir` lets you publish a bundle from a non-default folder
-- Expo publish/upload forwards the stored Expo app config when present
+- Expo publish forwards the stored Expo app config when present
+- Otalan validates the release ZIP before the publish completes
 
 Default flow:
 
@@ -303,36 +307,9 @@ Default flow:
 otalan publish --channel production
 ```
 
-This uses `POST /v1/releases/create`, which uploads the ZIP and publishes it in one request.
+This uses `POST /v1/releases/create` and waits for `GET /v1/releases/ingests/:id` to reach `ready` before returning success.
 
-### `otalan upload`
-
-Uploads the current bundle archive without publishing it.
-
-Use this when you want the refactored two-step managed storage flow:
-
-1. `otalan upload` to get a managed `storageKey`
-2. `otalan publish --storage-key ...` to activate it later
-
-```bash
-otalan upload --channel production
-```
-
-Direct publish with existing storage:
-
-```bash
-otalan publish \
-  --channel production \
-  --storage-key otalan-bundles/example.zip
-```
-
-Direct publish with BYO hosting:
-
-```bash
-otalan publish \
-  --channel production \
-  --download-url https://cdn.example.com/ios/1.0.5.zip
-```
+If validation fails, `otalan publish` exits non-zero and prints the ingest failure reason when the API provides one. This makes the command safe to use directly in CI/CD pipelines.
 
 ### `otalan bundles`
 

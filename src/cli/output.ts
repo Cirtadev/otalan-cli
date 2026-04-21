@@ -1,5 +1,5 @@
 import type { BundleIdSource } from '../bundle'
-import type { ReleaseItem, UploadArtifact } from '../http'
+import type { BundleIngestItem, ReleaseItem } from '../http'
 
 // -----------------------------------------------------------------------------
 // Generic output
@@ -31,10 +31,8 @@ export function printHelp() {
     ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
     ['', '[--native-version 1.0.0] [--runtime-version 1.0.0]', ''],
-    ['upload', '[--output-dir .otalan/bundle] [--channel production]', 'Upload the current bundle archive without publishing it.'],
-    ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Upload and publish the current bundle.'],
+    ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Publish the current bundle ZIP with rollout metadata.'],
     ['', '[--release-notes "..."] [--optional] [--rollout-percent 100]', ''],
-    ['', '[--storage-key ...] [--download-url ...]', ''],
     ['bundles', '[--platform ios|android]', 'List published bundles for a release tuple.'],
     ['', '[--channel production] [--native-version 1.0.0]', ''],
     ['rollback', '--bundle-id ... [--platform ios|android]', 'Reactivate a published bundle.'],
@@ -47,8 +45,8 @@ export function printHelp() {
     'Get CI keys from https://otalan.com/api-keys.',
     'Build web assets before running `otalan bundle` for Capacitor projects.',
     'Use `--target expo` for Expo and React Native apps that ship OTA updates through Expo export.',
-    'Use `upload` when you want a managed storage key before publishing.',
-    'Run `otalan login` before upload, publish, rollback, status, or bundles.',
+    'Otalan validates release ZIPs before `otalan publish` succeeds.',
+    'Run `otalan login` before publish, rollback, status, or bundles.',
   ] as const
   const commandWidth = 12
 
@@ -155,23 +153,29 @@ export function formatPublishSummary(input: {
   return lines.join('\n')
 }
 
-export function formatUploadSummary(input: {
-  bundleId: string
-  platform: string
-  channel: string
-  nativeVersion: string
-  upload: UploadArtifact
+export function formatIngestSummary(input: {
+  ingest: BundleIngestItem
 }) {
-  return [
-    `Bundle ID: ${input.bundleId}`,
-    `Platform: ${input.platform}`,
-    `Channel: ${input.channel}`,
-    `Native version: ${input.nativeVersion}`,
-    `Storage key: ${input.upload.storageKey}`,
-    `Checksum: ${input.upload.checksum}`,
-    `Size: ${input.upload.fileSizeBytes} bytes`,
-    `Download URL: ${input.upload.downloadUrl}`,
-  ].join('\n')
+  const lines = [
+    `Ingest ID: ${input.ingest.id}`,
+    `Status: ${input.ingest.status}`,
+    `Size: ${input.ingest.fileSizeBytes} bytes`,
+    `Queued at: ${input.ingest.createdAt}`,
+  ]
+
+  if (input.ingest.processedAt) {
+    lines.push(`Processed at: ${input.ingest.processedAt}`)
+  }
+
+  if (input.ingest.checksum) {
+    lines.push(`Checksum: ${input.ingest.checksum}`)
+  }
+
+  if (input.ingest.failureReason) {
+    lines.push(`Failure reason: ${input.ingest.failureReason}`)
+  }
+
+  return lines.join('\n')
 }
 
 function formatCell(value: string, width: number) {

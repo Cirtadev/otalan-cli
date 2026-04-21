@@ -5,7 +5,7 @@ import type { CommandContext } from './cli/helpers'
 import { printHelp } from './cli/output'
 import { handleInit, handleLogin } from './commands/auth'
 import { handleBundle } from './commands/bundle'
-import { handleBundlesList, handlePublish, handleRollback, handleStatus, handleUpload } from './commands/release'
+import { handleBundlesList, handlePublish, handleRollback, handleStatus } from './commands/release'
 
 // -----------------------------------------------------------------------------
 // Entrypoint
@@ -34,9 +34,6 @@ async function main() {
       return
     case 'publish':
       await handlePublish(context, parsed.options)
-      return
-    case 'upload':
-      await handleUpload(context, parsed.options)
       return
     case 'rollback':
       await handleRollback(context, parsed.options)
