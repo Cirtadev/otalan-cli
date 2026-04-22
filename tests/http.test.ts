@@ -33,7 +33,11 @@ function createQueuedIngest(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function mockQueuedIngestFetch(expectedPath: string, method: 'GET' | 'POST' = 'POST') {
+function mockQueuedIngestFetch(
+  expectedPath: string,
+  method: 'GET' | 'POST' = 'POST',
+  status = method === 'GET' ? 200 : 202,
+) {
   globalThis.fetch = (async (input, init) => {
     expect(String(input)).toBe(`https://api.otalan.com${expectedPath}`)
     expect(init?.method).toBe(method)
@@ -44,7 +48,7 @@ function mockQueuedIngestFetch(expectedPath: string, method: 'GET' | 'POST' = 'P
     return new Response(JSON.stringify({
       item: createQueuedIngest(),
     }), {
-      status: 202,
+      status,
       headers: {
         'Content-Type': 'application/json',
       },
