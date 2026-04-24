@@ -60,7 +60,7 @@ export async function handleInit(context: CommandContext, options: Record<string
     : null
   const appId = readStringOption(options, 'app-id') ?? await promptWithHint({
     question: 'App ID',
-    hint: 'Registered app ID from the Apps page. It is resolved within the project linked to the CI key.',
+    hint: 'Active registered app ID from the Apps page. It is resolved within the project linked to the CI key.',
   })
 
   await saveProjectConfig(context.cwd, {

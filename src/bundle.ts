@@ -82,7 +82,18 @@ async function pathIsDirectory(directoryPath: string) {
 
 async function collectDirectoryEntries(rootDir: string, currentDir = rootDir) {
   const entries: Record<string, Uint8Array> = {}
-  const items = await readdir(currentDir, { withFileTypes: true })
+  const items = (await readdir(currentDir, { withFileTypes: true }))
+    .sort((left, right) => {
+      if (left.name < right.name) {
+        return -1
+      }
+
+      if (left.name > right.name) {
+        return 1
+      }
+
+      return 0
+    })
 
   for (const item of items) {
     const absolutePath = path.join(currentDir, item.name)
@@ -647,6 +658,7 @@ export const bundleTestUtils = {
   resolveExpoNativeVersion,
   resolveExpoRuntimeVersion,
   findRuntimeVersionInObject,
+  collectDirectoryEntries,
 }
 
 // -----------------------------------------------------------------------------

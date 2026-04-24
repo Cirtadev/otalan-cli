@@ -37,6 +37,7 @@ describe('CLI help', () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain('Publish the current bundle ZIP with rollout metadata.')
+    expect(result.stdout).toContain('Release commands require the configured app to be active, not archived.')
     expect(result.stdout).not.toContain('upload')
     expect(result.stdout).not.toContain('--storage-key')
     expect(result.stdout).not.toContain('--download-url')

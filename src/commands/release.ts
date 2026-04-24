@@ -91,8 +91,13 @@ async function resolveDefaultNativeVersion(
 function resolveRolloutPercent(options: Record<string, string | boolean>) {
   const rolloutPercent = Number(readStringOption(options, 'rollout-percent') ?? '100')
 
-  if (Number.isNaN(rolloutPercent) || rolloutPercent < 0 || rolloutPercent > 100) {
-    throw new Error('rollout-percent must be between 0 and 100.')
+  if (
+    Number.isNaN(rolloutPercent)
+    || !Number.isInteger(rolloutPercent)
+    || rolloutPercent < 0
+    || rolloutPercent > 100
+  ) {
+    throw new Error('rollout-percent must be an integer between 0 and 100.')
   }
 
   return rolloutPercent
@@ -407,5 +412,6 @@ export async function handleBundlesList(
 
 export const releaseTestUtils = {
   isTerminalIngestStatus,
+  resolveRolloutPercent,
   waitForReleaseIngest,
 }

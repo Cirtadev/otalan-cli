@@ -37,7 +37,7 @@ bun ./src/bin.ts help
 otalan login --api-key otalan_ci_xxx
 ```
 
-2. Link the current repo to your Otalan app:
+2. Link the current repo to your active Otalan app:
 
 ```bash
 otalan init --app-id com.example.app
@@ -68,7 +68,7 @@ otalan publish --channel production
 otalan login --api-key otalan_ci_xxx
 ```
 
-2. Link the current repo to your Otalan app:
+2. Link the current repo to your active Otalan app:
 
 ```bash
 otalan init --app-id com.example.app
@@ -96,7 +96,7 @@ The CLI is designed to work well in CI/CD with a project-scoped Otalan CI key.
 Set these secrets in your CI provider:
 
 - `OTALAN_API_KEY`
-- `OTALAN_APP_ID`
+- `OTALAN_APP_ID` for an active app
 
 Optional:
 

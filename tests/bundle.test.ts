@@ -1,3 +1,7 @@
+import { mkdtemp, mkdir, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+
 import { describe, expect, test } from 'bun:test'
 
 import { bundleTestUtils } from '../src/bundle'
@@ -50,6 +54,29 @@ describe('bundleTestUtils.resolveBundleId', () => {
       bundleId: '3.0.0-abcdef123456',
       bundleIdSource: 'native-version',
     })
+  })
+})
+
+describe('bundleTestUtils.collectDirectoryEntries', () => {
+  test('collects entries in deterministic path order', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-bundle-test-'))
+
+    try {
+      await mkdir(path.join(rootDir, 'nested'))
+      await Bun.write(path.join(rootDir, 'z.txt'), 'z')
+      await Bun.write(path.join(rootDir, 'a.txt'), 'a')
+      await Bun.write(path.join(rootDir, 'nested', 'b.txt'), 'b')
+
+      const entries = await bundleTestUtils.collectDirectoryEntries(rootDir)
+
+      expect(Object.keys(entries)).toEqual([
+        'a.txt',
+        'nested/b.txt',
+        'z.txt',
+      ])
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
   })
 })
 

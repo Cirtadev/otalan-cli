@@ -47,6 +47,7 @@ export function printHelp() {
     'Use `--target expo` for Expo and React Native apps that ship OTA updates through Expo export.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
     'Run `otalan login` before publish, rollback, status, or bundles.',
+    'Release commands require the configured app to be active, not archived.',
   ] as const
   const commandWidth = 12
 

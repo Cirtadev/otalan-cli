@@ -97,3 +97,21 @@ describe('releaseTestUtils.waitForReleaseIngest', () => {
     })).rejects.toThrow('Timed out waiting for release validation. Ingest ingest-123 is still processing.')
   })
 })
+
+describe('releaseTestUtils.resolveRolloutPercent', () => {
+  test('defaults to 100 when the option is omitted', () => {
+    expect(releaseTestUtils.resolveRolloutPercent({})).toBe(100)
+  })
+
+  test('accepts integer percentages in range', () => {
+    expect(releaseTestUtils.resolveRolloutPercent({
+      'rollout-percent': '25',
+    })).toBe(25)
+  })
+
+  test('rejects fractional percentages before calling the API', () => {
+    expect(() => releaseTestUtils.resolveRolloutPercent({
+      'rollout-percent': '25.5',
+    })).toThrow('rollout-percent must be an integer between 0 and 100.')
+  })
+})
