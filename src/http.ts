@@ -104,6 +104,10 @@ async function assertResponseOk(response: Response) {
     ? messageValue
     : `Request failed with status ${response.status}`
 
+  if (message === 'App not found in selected project') {
+    throw new Error(`${message}. Check that appId is correct and the app is not archived.`)
+  }
+
   throw new Error(message)
 }
 

@@ -225,7 +225,7 @@ otalan login --api-key otalan_ci_xxx --api-url http://localhost:8787
 
 Creates `otalan.config.json` in the current project.
 
-`appId` is the registered app ID shown under the app name on the Apps page in Otalan. It is scoped to the current project, not globally unique across all projects.
+`appId` is the registered app ID shown under the app name on the Apps page in Otalan. It is scoped to the current project, not globally unique across all projects. The app must be active; archived apps are treated as unavailable for CI publish, rollback, status, and bundle listing commands.
 
 If you already ran `otalan login`, the CLI resolves `organizationSlug` and `projectSlug` automatically from the CI key and stores them as a safety check.
 
@@ -390,5 +390,5 @@ otalan status --platform ios --channel production
 - Expo / React Native bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
 - Local development API URL is `http://localhost:8787`.
-- Publishing, rollback, status, and `bundles` expect a CI key.
+- Publishing, rollback, status, and `bundles` expect a CI key and an active app.
 - Run `bun run build` after changing CLI source if you want `dist/bin.js` updated locally.

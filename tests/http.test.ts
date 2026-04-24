@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createRelease, getReleaseIngest } from '../src/http'
+import { createRelease, getReleaseIngest, listReleases } from '../src/http'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -139,5 +139,27 @@ describe('createRelease', () => {
     expect(formData.get('rolloutPercent')).toBe('25')
     expect(formData.get('releaseNotes')).toBe('Fixes startup crash')
     expect(formData.get('expoConfig')).toBe('{"scheme":"example"}')
+  })
+})
+
+describe('release request errors', () => {
+  test('explains that archived apps are unavailable to CI release operations', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({
+        message: 'App not found in selected project',
+      }), {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })) as unknown as typeof fetch
+
+    await expect(listReleases({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      appId: 'com.example.app',
+    })).rejects.toThrow(
+      'App not found in selected project. Check that appId is correct and the app is not archived.',
+    )
   })
 })
