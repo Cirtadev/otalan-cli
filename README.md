@@ -174,6 +174,7 @@ Adjust the build step and bundle target for your app:
 ## What It Does
 
 - logs into the Otalan API
+- checks API connectivity and CI key context
 - links the current repo to an Otalan app
 - bundles Capacitor or Expo / React Native OTA output
 - publishes a bundle with rollout metadata
@@ -227,6 +228,20 @@ Local development:
 
 ```bash
 otalan login --api-key otalan_ci_xxx --api-url http://localhost:8787
+```
+
+### `otalan doctor`
+
+Checks API connectivity and prints the organization/project context resolved from the configured CI key.
+
+```bash
+otalan doctor
+```
+
+CI usage without saved local auth:
+
+```bash
+otalan doctor --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://api.otalan.com}"
 ```
 
 ### `otalan init`

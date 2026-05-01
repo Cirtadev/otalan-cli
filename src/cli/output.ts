@@ -27,6 +27,7 @@ export function printHelp() {
     ['help', '', 'Show help.'],
     ['login', '[--api-key ...] [--api-url ...]', 'Save the CI key and API URL locally.'],
     ['init', '[--app-id ...]', 'Create otalan.config.json and link this repo to an app.'],
+    ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and CI key context.'],
     ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo/React Native apps.'],
     ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
@@ -46,7 +47,7 @@ export function printHelp() {
     'Build web assets before running `otalan bundle` for Capacitor projects.',
     'Use `--target expo` for Expo and React Native apps that ship OTA updates through Expo export.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
-    'Run `otalan login` before publish, rollback, status, or bundles.',
+    'Run `otalan login` before doctor, publish, rollback, status, or bundles.',
     'Release commands require the configured app to be active, not archived.',
   ] as const
   const commandWidth = 12

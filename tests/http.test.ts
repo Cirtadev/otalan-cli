@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createRelease, getReleaseIngest, listReleases } from '../src/http'
+import { createRelease, getReleaseContext, getReleaseIngest, listReleases } from '../src/http'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -65,6 +65,42 @@ function createArchiveFile() {
 // -----------------------------------------------------------------------------
 // Release ingest requests
 // -----------------------------------------------------------------------------
+
+describe('getReleaseContext', () => {
+  test('reads the authenticated CI key context', async () => {
+    globalThis.fetch = (async (input, init) => {
+      expect(String(input)).toBe('https://api.otalan.com/v1/releases/context')
+      expect(init?.method).toBe('GET')
+      expect(init?.headers).toEqual({
+        'x-api-key': 'test-key',
+      })
+
+      return new Response(JSON.stringify({
+        item: {
+          organizationId: 'org-123',
+          organizationName: 'Test Org',
+          organizationSlug: 'test-org',
+          projectId: 'project-123',
+          projectName: 'Test Project',
+          projectSlug: 'test-project',
+        },
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }) as typeof fetch
+
+    const item = await getReleaseContext({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+    })
+
+    expect(item.organizationSlug).toBe('test-org')
+    expect(item.projectSlug).toBe('test-project')
+  })
+})
 
 describe('getReleaseIngest', () => {
   test('reads the current ingest state from the public ingest endpoint', async () => {

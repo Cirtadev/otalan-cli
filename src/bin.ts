@@ -3,7 +3,7 @@
 import { parseArgs } from './cli/args'
 import type { CommandContext } from './cli/helpers'
 import { printHelp } from './cli/output'
-import { handleInit, handleLogin } from './commands/auth'
+import { handleDoctor, handleInit, handleLogin } from './commands/auth'
 import { handleBundle } from './commands/bundle'
 import { handleBundlesList, handlePublish, handleRollback, handleStatus } from './commands/release'
 
@@ -28,6 +28,9 @@ async function main() {
       return
     case 'init':
       await handleInit(context, parsed.options)
+      return
+    case 'doctor':
+      await handleDoctor(parsed.options)
       return
     case 'bundle':
       await handleBundle(context, parsed.options)

@@ -50,6 +50,19 @@ export async function handleLogin(options: Record<string, string | boolean>) {
   console.log('Saved CLI auth.')
 }
 
+export async function handleDoctor(options: Record<string, string | boolean>) {
+  const api = await resolveApiConfig(options)
+  const context = await getReleaseContext({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+  })
+
+  console.log('Otalan API connection OK.')
+  console.log(`API URL: ${api.apiUrl}`)
+  console.log(`Organization: ${context.organizationSlug}`)
+  console.log(`Project: ${context.projectSlug}`)
+}
+
 export async function handleInit(context: CommandContext, options: Record<string, string | boolean>) {
   const api = await resolveApiConfig(options).catch(() => null)
   const releaseContext = api

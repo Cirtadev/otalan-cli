@@ -36,6 +36,8 @@ describe('CLI help', () => {
     const result = await runCli(['help'])
 
     expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('doctor')
+    expect(result.stdout).toContain('Check API connectivity and CI key context.')
     expect(result.stdout).toContain('Publish the current bundle ZIP with rollout metadata.')
     expect(result.stdout).toContain('Release commands require the configured app to be active, not archived.')
     expect(result.stdout).not.toContain('upload')
