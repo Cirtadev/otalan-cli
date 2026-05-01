@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -31,8 +31,8 @@ export type ProjectConfig = z.infer<typeof projectConfigSchema>
 
 export const PROJECT_CONFIG_FILE = 'otalan.config.json'
 
-function getGlobalConfigPath() {
-  return path.join(os.homedir(), '.otalan', 'config.json')
+function getGlobalConfigPath(homeDir = os.homedir()) {
+  return path.join(homeDir, '.otalan', 'config.json')
 }
 
 // -----------------------------------------------------------------------------
@@ -44,9 +44,19 @@ async function readJsonFile<T>(filePath: string, schema: z.ZodType<T>) {
   return schema.parse(JSON.parse(raw))
 }
 
-async function writeJsonFile(filePath: string, value: unknown) {
+async function writeJsonFile(filePath: string, value: unknown, options: { mode?: number } = {}) {
   await mkdir(path.dirname(filePath), { recursive: true })
-  await Bun.write(filePath, `${JSON.stringify(value, null, 2)}\n`)
+  const content = `${JSON.stringify(value, null, 2)}\n`
+
+  if (options.mode !== undefined) {
+    await writeFile(filePath, content, {
+      mode: options.mode,
+    })
+    await chmod(filePath, options.mode)
+    return
+  }
+
+  await Bun.write(filePath, content)
 }
 
 // -----------------------------------------------------------------------------
@@ -57,8 +67,10 @@ export async function loadGlobalConfig() {
   return readJsonFile(getGlobalConfigPath(), globalConfigSchema)
 }
 
-export async function saveGlobalConfig(config: GlobalConfig) {
-  await writeJsonFile(getGlobalConfigPath(), globalConfigSchema.parse(config))
+export async function saveGlobalConfig(config: GlobalConfig, options: { homeDir?: string } = {}) {
+  await writeJsonFile(getGlobalConfigPath(options.homeDir), globalConfigSchema.parse(config), {
+    mode: 0o600,
+  })
 }
 
 export async function loadProjectConfig(cwd: string) {

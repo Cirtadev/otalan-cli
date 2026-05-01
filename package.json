@@ -3,9 +3,20 @@
   "version": "1.0.0",
   "description": "Otalan CLI for bundling and publishing OTA updates.",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/Cirtadev/otalan-cli#readme",
+  "bugs": {
+    "url": "https://github.com/Cirtadev/otalan-cli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cirtadev/otalan-cli.git"
+  },
   "type": "module",
   "engines": {
     "bun": ">=1.3.11"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist/bin.js",

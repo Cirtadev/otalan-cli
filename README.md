@@ -11,6 +11,14 @@ Published as an npm package, but the CLI itself runs on Bun.
 
 Do not use the OTA app key in the CLI.
 
+## Platform Support
+
+The npm package ships a Bun-based CLI entrypoint, not standalone native binaries.
+
+- macOS and Linux are supported when Bun `>= 1.3.11` is installed.
+- Windows support is experimental until the CLI release flow is validated on Windows.
+- Native compile scripts exist for macOS, Linux, and Windows maintainers, but the compiled binaries are not included in the npm package.
+
 ## Install
 
 Recommended:
@@ -383,6 +391,21 @@ otalan status --platform ios --channel production
   "platform": "ios"
 }
 ```
+
+## Maintainer Release Checklist
+
+Before publishing a public package release:
+
+```bash
+bun install --frozen-lockfile
+bun test
+bun run check
+bun run lint
+bun run build
+bun pm pack --dry-run
+```
+
+`prepublishOnly` reruns tests, TypeScript, and ESLint. The scoped npm package is configured for public publishing through `publishConfig.access`.
 
 ## Notes
 

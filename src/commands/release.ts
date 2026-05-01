@@ -26,6 +26,7 @@ import { promptSelectWithHint, promptWithHint } from '../cli/prompts'
 import type { MobilePlatform } from '../config'
 import {
   type BundleIngestItem,
+  type ReleaseItem,
   createRelease,
   getReleaseIngest,
   listReleases,
@@ -152,6 +153,36 @@ function isTerminalIngestStatus(status: string) {
   return status === 'ready' || status === 'failed'
 }
 
+async function resolveRollbackTargetBundleId(input: {
+  options: Record<string, string | boolean>
+  releases: ReleaseItem[]
+  promptTargetBundleId?: (example: string) => Promise<string>
+}) {
+  const targetBundleId = readStringOption(input.options, 'bundle-id')
+    ?? readStringOption(input.options, 'target-bundle-id')
+
+  if (targetBundleId) {
+    return targetBundleId
+  }
+
+  const example = input.releases.find(item => item.resolvedDownloadUrl)?.bundleId ?? '1.0.0-web.1'
+
+  console.log('')
+  console.log('Available bundles')
+  console.log('')
+  printBundlesTable(input.releases)
+
+  if (input.promptTargetBundleId) {
+    return input.promptTargetBundleId(example)
+  }
+
+  return promptWithHint({
+    question: 'Target bundle ID',
+    hint: 'Published bundle ID to reactivate.',
+    example,
+  })
+}
+
 async function waitForReleaseIngest(input: {
   ingest: BundleIngestItem
   loadIngest: (ingestId: string) => Promise<BundleIngestItem>
@@ -267,13 +298,6 @@ export async function handleRollback(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const targetBundleId = readStringOption(options, 'bundle-id')
-    ?? readStringOption(options, 'target-bundle-id')
-    ?? await promptWithHint({
-      question: 'Target bundle ID',
-      hint: 'Published bundle ID to reactivate.',
-      example: '1.0.0-web.1',
-    })
   const platformFallback = readStringOption(options, 'platform')
     ? undefined
     : await promptPlatformChoice()
@@ -294,6 +318,11 @@ export async function handleRollback(
     channel,
     nativeVersion,
   })
+  const targetBundleId = await resolveRollbackTargetBundleId({
+    options,
+    releases,
+  })
+
   const targetRelease = releases.find(item => item.bundleId === targetBundleId)
 
   if (!targetRelease) {
@@ -412,6 +441,7 @@ export async function handleBundlesList(
 
 export const releaseTestUtils = {
   isTerminalIngestStatus,
+  resolveRollbackTargetBundleId,
   resolveRolloutPercent,
   waitForReleaseIngest,
 }

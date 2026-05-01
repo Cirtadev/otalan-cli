@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { BundleIngestItem } from '../../src/http'
+import type { BundleIngestItem, ReleaseItem } from '../../src/http'
 import { releaseTestUtils } from '../../src/commands/release'
+
+// -----------------------------------------------------------------------------
+// Fixtures
+// -----------------------------------------------------------------------------
 
 function createIngest(overrides: Partial<BundleIngestItem> = {}): BundleIngestItem {
   return {
@@ -23,6 +27,105 @@ function createIngest(overrides: Partial<BundleIngestItem> = {}): BundleIngestIt
     ...overrides,
   }
 }
+
+function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
+  return {
+    id: 'release-123',
+    projectId: 'project-123',
+    appId: 'com.example.app',
+    platform: 'ios',
+    channel: 'production',
+    nativeVersion: '1.0.0',
+    bundleId: '1.0.0-web.1',
+    storageKey: 'bundles/ios.zip',
+    downloadUrl: 'https://cdn.example.com/ios.zip',
+    checksum: 'abc123',
+    mandatory: true,
+    rolloutPercent: 100,
+    rolloutState: 'complete',
+    releaseNotes: null,
+    fileSizeBytes: 1234,
+    storageObjectExists: true,
+    isActive: false,
+    createdAt: '2026-04-21T00:00:00.000Z',
+    resolvedDownloadUrl: 'https://cdn.example.com/ios.zip',
+    ...overrides,
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Rollback command
+// -----------------------------------------------------------------------------
+
+describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
+  test('prints available bundles before prompting for the target bundle ID', async () => {
+    const originalLog = console.log
+    const events: string[] = []
+
+    console.log = (...values: unknown[]) => {
+      events.push(values.map(String).join(' '))
+    }
+
+    try {
+      const targetBundleId = await releaseTestUtils.resolveRollbackTargetBundleId({
+        options: {},
+        releases: [
+          createRelease({
+            bundleId: '1.0.0-web.2',
+            isActive: true,
+            createdAt: '2026-04-22T00:00:00.000Z',
+          }),
+          createRelease(),
+        ],
+        promptTargetBundleId: async example => {
+          events.push(`PROMPT ${example}`)
+          return '1.0.0-web.1'
+        },
+      })
+
+      expect(targetBundleId).toBe('1.0.0-web.1')
+      expect(events).toContain('Available bundles')
+      expect(events.some(event => event.includes('bundleId'))).toBe(true)
+      expect(events.some(event => event.includes('1.0.0-web.2'))).toBe(true)
+      expect(events.some(event => event.includes('1.0.0-web.1'))).toBe(true)
+      expect(events.indexOf('Available bundles')).toBeLessThan(events.indexOf('PROMPT 1.0.0-web.2'))
+    } finally {
+      console.log = originalLog
+    }
+  })
+
+  test('uses the option value without printing choices', async () => {
+    const originalLog = console.log
+    const events: string[] = []
+
+    console.log = (...values: unknown[]) => {
+      events.push(values.map(String).join(' '))
+    }
+
+    try {
+      const targetBundleId = await releaseTestUtils.resolveRollbackTargetBundleId({
+        options: {
+          'bundle-id': '1.0.0-web.1',
+        },
+        releases: [
+          createRelease(),
+        ],
+        promptTargetBundleId: async () => {
+          throw new Error('Prompt should not be called.')
+        },
+      })
+
+      expect(targetBundleId).toBe('1.0.0-web.1')
+      expect(events).toEqual([])
+    } finally {
+      console.log = originalLog
+    }
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Ingest polling
+// -----------------------------------------------------------------------------
 
 describe('releaseTestUtils.waitForReleaseIngest', () => {
   test('waits until the ingest reaches ready', async () => {
