@@ -1,6 +1,6 @@
 {
   "name": "@otalan/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Otalan CLI for bundling and publishing OTA updates.",
   "license": "Apache-2.0",
   "author": {
@@ -34,6 +34,7 @@
   "files": [
     "dist/bin.js",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE",
     "third-party-licenses.txt"
