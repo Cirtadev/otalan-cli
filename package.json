@@ -3,6 +3,19 @@
   "version": "1.0.0",
   "description": "Otalan CLI for bundling and publishing OTA updates.",
   "license": "Apache-2.0",
+  "author": {
+    "name": "Cirtadev",
+    "url": "https://github.com/Cirtadev"
+  },
+  "keywords": [
+    "otalan",
+    "ota",
+    "cli",
+    "capacitor",
+    "expo",
+    "react-native",
+    "codepush"
+  ],
   "homepage": "https://github.com/Cirtadev/otalan-cli#readme",
   "bugs": {
     "url": "https://github.com/Cirtadev/otalan-cli/issues"
