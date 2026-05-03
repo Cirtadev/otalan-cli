@@ -216,6 +216,15 @@ Example project config:
 
 Shows the available commands.
 
+### `otalan version`
+
+Prints the installed CLI version.
+
+```bash
+otalan version
+otalan --version
+```
+
 ### `otalan login`
 
 Saves the CI key and API base URL locally.

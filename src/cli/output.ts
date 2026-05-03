@@ -22,9 +22,10 @@ export function formatBundleIdSource(source: BundleIdSource) {
   }
 }
 
-export function printHelp() {
+export function printHelp(version: string) {
   const commands = [
     ['help', '', 'Show help.'],
+    ['version', '', 'Show CLI version.'],
     ['login', '[--api-key ...] [--api-url ...]', 'Save the CI key and API URL locally.'],
     ['init', '[--app-id ...]', 'Create otalan.config.json and link this repo to an app.'],
     ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and CI key context.'],
@@ -52,7 +53,7 @@ export function printHelp() {
   ] as const
   const commandWidth = 12
 
-  console.log('Otalan CLI')
+  console.log(`Otalan CLI ${version}`)
   console.log('')
   console.log('Usage: otalan <command> [options]')
   console.log('')

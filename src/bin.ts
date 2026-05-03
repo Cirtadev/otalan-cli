@@ -11,6 +11,21 @@ import { handleBundlesList, handlePublish, handleRollback, handleStatus } from '
 // Entrypoint
 // -----------------------------------------------------------------------------
 
+interface PackageMetadata {
+  version?: unknown
+}
+
+async function readCliVersion() {
+  const packageUrl = new URL('../package.json', import.meta.url)
+  const packageMetadata = await Bun.file(packageUrl).json() as PackageMetadata
+
+  if (typeof packageMetadata.version !== 'string') {
+    throw new Error('Unable to read CLI version from package.json.')
+  }
+
+  return packageMetadata.version
+}
+
 async function main() {
   const parsed = parseArgs(process.argv.slice(2))
   const context: CommandContext = {
@@ -18,7 +33,7 @@ async function main() {
   }
 
   if (parsed.options.help === true) {
-    printHelp()
+    printHelp(await readCliVersion())
     return
   }
 
@@ -42,7 +57,12 @@ async function main() {
       await handleRollback(context, parsed.options)
       return
     case 'help':
-      printHelp()
+      printHelp(await readCliVersion())
+      return
+    case 'version':
+    case '--version':
+    case '-v':
+      console.log(await readCliVersion())
       return
     case 'status':
       await handleStatus(context, parsed.options)
@@ -53,12 +73,12 @@ async function main() {
         return
       }
 
-      printHelp()
+      printHelp(await readCliVersion())
       return
     case '--help':
     case '-h':
     case undefined:
-      printHelp()
+      printHelp(await readCliVersion())
       return
     default:
       throw new Error(`Unknown command: ${parsed.command}`)

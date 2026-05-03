@@ -31,11 +31,25 @@ async function runCli(args: string[]) {
   }
 }
 
+async function readPackageVersion() {
+  const packageJson = await Bun.file(path.join(PROJECT_ROOT, 'package.json')).json() as { version?: unknown }
+
+  if (typeof packageJson.version !== 'string') {
+    throw new Error('package.json version must be a string.')
+  }
+
+  return packageJson.version
+}
+
 describe('CLI help', () => {
   test('help reflects the publish-only release workflow', async () => {
     const result = await runCli(['help'])
+    const version = await readPackageVersion()
 
     expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain(`Otalan CLI ${version}`)
+    expect(result.stdout).toContain('version')
+    expect(result.stdout).toContain('Show CLI version.')
     expect(result.stdout).toContain('doctor')
     expect(result.stdout).toContain('Check API connectivity and CI key context.')
     expect(result.stdout).toContain('Publish the current bundle ZIP with rollout metadata.')
@@ -43,6 +57,15 @@ describe('CLI help', () => {
     expect(result.stdout).not.toContain('upload')
     expect(result.stdout).not.toContain('--storage-key')
     expect(result.stdout).not.toContain('--download-url')
+    expect(result.stderr).toBe('')
+  })
+
+  test('no command prints help with the package version', async () => {
+    const result = await runCli([])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain(`Otalan CLI ${await readPackageVersion()}`)
+    expect(result.stdout).toContain('Usage: otalan <command> [options]')
     expect(result.stderr).toBe('')
   })
 
@@ -58,6 +81,7 @@ describe('CLI help', () => {
     const result = await runCli(['login', '--help'])
 
     expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain(`Otalan CLI ${await readPackageVersion()}`)
     expect(result.stdout).toContain('Usage: otalan <command> [options]')
     expect(result.stdout).not.toContain('Otalan API URL (')
     expect(result.stdout).not.toContain('Get your CI key from:')
@@ -69,8 +93,23 @@ describe('CLI help', () => {
     const result = await runCli(['init', '--help'])
 
     expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain(`Otalan CLI ${await readPackageVersion()}`)
     expect(result.stdout).toContain('Usage: otalan <command> [options]')
     expect(result.stdout).not.toContain('App ID:')
+    expect(result.stderr).toBe('')
+  })
+})
+
+describe('CLI version', () => {
+  test.each([
+    ['version'],
+    ['--version'],
+    ['-v'],
+  ])('%s prints the package version', async (command) => {
+    const result = await runCli([command])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.trim()).toBe(await readPackageVersion())
     expect(result.stderr).toBe('')
   })
 })

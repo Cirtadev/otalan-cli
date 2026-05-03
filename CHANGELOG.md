@@ -2,6 +2,13 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.0.2 - 2026-05-04
+
+### Added
+
+- Add `otalan version`, `otalan --version`, and `otalan -v`.
+- Show the installed CLI version in help output.
+
 ## 1.0.1 - 2026-05-04
 
 ### Changed
