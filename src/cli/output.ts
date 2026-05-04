@@ -13,6 +13,8 @@ export function formatBundleIdSource(source: BundleIdSource) {
   switch (source) {
     case 'flag':
       return 'Using bundle ID from --bundle-id.'
+    case 'prompt':
+      return 'Using bundle ID from prompt.'
     case 'native-version':
       return 'Using bundle ID from nativeVersion with a hash suffix.'
     case 'package-json':
@@ -32,7 +34,7 @@ export function printHelp(version: string) {
     ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo/React Native apps.'],
     ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
-    ['', '[--native-version 1.0.0] [--runtime-version 1.0.0]', ''],
+    ['', '[--native-version 1.0.0] [--runtime-version 1.0.0] [--channel production]', ''],
     ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Publish the current bundle ZIP with rollout metadata.'],
     ['', '[--release-notes "..."] [--optional] [--rollout-percent 100]', ''],
     ['bundles', '[--platform ios|android]', 'List published bundles for a release tuple.'],

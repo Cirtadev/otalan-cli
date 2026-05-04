@@ -35,13 +35,14 @@ export type ExpoBundleManifest = BundleBaseManifest & {
 }
 
 export type BundleManifest = CapacitorBundleManifest | ExpoBundleManifest
-export type BundleIdSource = 'flag' | 'native-version' | 'package-json'
+export type BundleIdSource = 'flag' | 'prompt' | 'native-version' | 'package-json'
 
 type BundleOptions = {
   cwd: string
   outputDir: string
   bundleId?: string
   bundleFromPackage?: boolean
+  explicitBundleIdSource?: Extract<BundleIdSource, 'flag' | 'prompt'>
   nativeVersion?: string
   runtimeVersion?: string
   inputDir?: string
@@ -599,6 +600,7 @@ export async function resolveProjectNativeVersion(
 function resolveBundleId(input: {
   bundleId?: string
   bundleFromPackage?: boolean
+  explicitBundleIdSource?: Extract<BundleIdSource, 'flag' | 'prompt'>
   packageVersion?: string
   nativeVersion: string
   hash: string
@@ -606,7 +608,7 @@ function resolveBundleId(input: {
   if (input.bundleId) {
     return {
       bundleId: normalizeBundleId(input.bundleId),
-      bundleIdSource: 'flag' as const,
+      bundleIdSource: input.explicitBundleIdSource ?? 'flag',
     }
   }
 
@@ -693,6 +695,7 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
   const { bundleId, bundleIdSource } = resolveBundleId({
     bundleId: options.bundleId,
     bundleFromPackage: options.bundleFromPackage,
+    explicitBundleIdSource: options.explicitBundleIdSource,
     packageVersion,
     nativeVersion,
     hash,
@@ -741,6 +744,7 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
     const { bundleId, bundleIdSource } = resolveBundleId({
       bundleId: options.bundleId,
       bundleFromPackage: options.bundleFromPackage,
+      explicitBundleIdSource: options.explicitBundleIdSource,
       packageVersion,
       nativeVersion,
       hash,

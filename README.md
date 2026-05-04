@@ -293,6 +293,7 @@ Current behavior:
 
 Native version defaults:
 
+- In an interactive terminal, `otalan bundle` prompts for the native version after showing the detected active native version.
 - Capacitor iOS reads `CFBundleShortVersionString` from `Info.plist` and resolves `$(MARKETING_VERSION)` from the Xcode project when needed
 - Capacitor Android reads `versionName` from `android/app/build.gradle` or `build.gradle.kts`
 - Expo reads the selected platform version from Expo config and falls back to the top-level Expo `version`
@@ -310,6 +311,10 @@ otalan bundle --target expo --platform ios --bundle-id 1.0.5
 
 If you omit `bundleId`:
 
+- in an interactive terminal, the CLI prompts for a bundle ID and shows the local bundle ID from `.otalan/bundle/manifest.json` when available
+- when `otalan login` and `otalan init` are configured, the prompt also shows the active published bundle ID for the selected platform/native version/channel
+- published bundle hints use `--channel`, defaulting to `production`
+- pressing Enter without a bundle ID keeps the automatic bundle ID behavior
 - the CLI reads `nativeVersion` from the selected native platform and adds a short hash suffix
 - example: `1.0.0-abc123def456`
 

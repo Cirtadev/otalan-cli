@@ -2,6 +2,12 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.0.3 - 2026-05-04
+
+### Added
+
+- Prompt interactively for bundle native version and bundle ID, with hints for the detected native version, local bundle ID, and active published bundle ID when available.
+
 ## 1.0.2 - 2026-05-04
 
 ### Added

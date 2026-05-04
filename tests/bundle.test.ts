@@ -24,6 +24,7 @@ describe('bundleTestUtils.resolveBundleId', () => {
   test('prefers an explicit bundle ID', () => {
     expect(bundleTestUtils.resolveBundleId({
       bundleId: '  1.0.5 beta ',
+      explicitBundleIdSource: 'flag',
       bundleFromPackage: true,
       packageVersion: '2.0.0',
       nativeVersion: '3.0.0',
@@ -31,6 +32,18 @@ describe('bundleTestUtils.resolveBundleId', () => {
     })).toEqual({
       bundleId: '1.0.5-beta',
       bundleIdSource: 'flag',
+    })
+  })
+
+  test('tracks bundle IDs entered through the interactive prompt', () => {
+    expect(bundleTestUtils.resolveBundleId({
+      bundleId: '  1.0.5 beta ',
+      explicitBundleIdSource: 'prompt',
+      nativeVersion: '3.0.0',
+      hash: 'abcdef1234567890',
+    })).toEqual({
+      bundleId: '1.0.5-beta',
+      bundleIdSource: 'prompt',
     })
   })
 
