@@ -116,6 +116,7 @@ Optional:
 
 ```bash
 bun install --frozen-lockfile
+bun add -g @otalan/cli
 bun run build
 otalan login --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://api.otalan.com}"
 otalan init --app-id "$OTALAN_APP_ID"
@@ -129,6 +130,7 @@ Use your normal app build command before `otalan bundle`. The CLI then packages 
 
 ```bash
 bun install --frozen-lockfile
+bun add -g @otalan/cli
 otalan login --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://api.otalan.com}"
 otalan init --app-id "$OTALAN_APP_ID"
 otalan bundle --target expo --platform ios --bundle-from-package
@@ -225,6 +227,7 @@ Prints the installed CLI version.
 ```bash
 otalan version
 otalan --version
+otalan -v
 ```
 
 ### `otalan login`
@@ -271,6 +274,8 @@ otalan init \
 ### `otalan bundle`
 
 Builds `.otalan/bundle/bundle.zip` and `.otalan/bundle/manifest.json`.
+
+`.otalan/` is generated output. Add it to your app repo's `.gitignore`; `otalan publish` reads the bundle files from the current CI workspace after `otalan bundle` runs.
 
 Capacitor:
 
@@ -324,6 +329,7 @@ If you want to take the bundle ID from `package.json` instead:
 
 ```bash
 otalan bundle --target capacitor --platform ios --bundle-from-package
+otalan bundle --target expo --platform ios --bundle-from-package
 ```
 
 ### `otalan publish`
@@ -335,8 +341,13 @@ Publishes the current bundle output with rollout metadata.
 Current behavior:
 
 - `channel` is chosen at publish time
+- publishes are mandatory by default
+- default rollout is `100`
 - `--platform` and `--native-version` can override the manifest, but only if they match it
 - `--output-dir` lets you publish a bundle from a non-default folder
+- `--rollout-percent` accepts an integer from `0` to `100`
+- `--optional` marks the update as non-mandatory
+- `--release-notes` attaches release notes to the published bundle
 - Expo publish forwards the stored Expo app config when present
 - Otalan validates the release ZIP before the publish completes
 
@@ -344,6 +355,18 @@ Default flow:
 
 ```bash
 otalan publish --channel production
+```
+
+Staged rollout:
+
+```bash
+otalan publish --channel production --rollout-percent 25 --release-notes "Fix startup crash"
+```
+
+Optional update:
+
+```bash
+otalan publish --channel production --optional
 ```
 
 This uses `POST /v1/releases/create` and waits for `GET /v1/releases/ingests/:id` to reach `ready` before returning success.
@@ -426,6 +449,10 @@ otalan status --platform ios --channel production
 ## Maintainer Release Checklist
 
 Before publishing a public package release:
+
+- update `package.json` to the new package version
+- add the matching `CHANGELOG.md` entry
+- run the release checks and inspect the package dry run
 
 ```bash
 bun install --frozen-lockfile

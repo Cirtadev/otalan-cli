@@ -2,6 +2,19 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.0.6 - 2026-05-05
+
+### Changed
+
+- Improve README CI setup examples, generated output guidance, publish rollout examples, and maintainer release checklist.
+- Add release metadata test coverage to keep package version and changelog entries in sync.
+
+## 1.0.5 - 2026-05-04
+
+### Changed
+
+- Update npm package homepage metadata.
+
 ## 1.0.4 - 2026-05-04
 
 ### Added
