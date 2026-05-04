@@ -1,7 +1,7 @@
 {
   "name": "@otalan/cli",
-  "version": "1.0.3",
-  "description": "Otalan CLI for bundling and publishing OTA updates.",
+  "version": "1.0.4",
+  "description": "Otalan CLI for bundling and publishing OTA updates through otalan.com.",
   "license": "Apache-2.0",
   "author": {
     "name": "Cirtadev",
@@ -16,7 +16,7 @@
     "react-native",
     "codepush"
   ],
-  "homepage": "https://github.com/Cirtadev/otalan-cli#readme",
+  "homepage": "https://github.com/Cirtadev/otalan-cli",
   "bugs": {
     "url": "https://github.com/Cirtadev/otalan-cli/issues"
   },

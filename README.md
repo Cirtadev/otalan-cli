@@ -2,6 +2,8 @@
 
 Otalan CLI for bundling and publishing OTA update releases for Capacitor and Expo / React Native apps.
 
+Website: [otalan.com](https://otalan.com)
+
 Published as an npm package, but the CLI itself runs on Bun.
 
 ## Requirements
