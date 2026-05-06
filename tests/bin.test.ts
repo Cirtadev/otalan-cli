@@ -52,6 +52,8 @@ describe('CLI help', () => {
     expect(result.stdout).toContain('Show CLI version.')
     expect(result.stdout).toContain('doctor')
     expect(result.stdout).toContain('Check API connectivity and CI key context.')
+    expect(result.stdout).toContain('keygen')
+    expect(result.stdout).toContain('Generate an Otalan key locally without calling the API.')
     expect(result.stdout).toContain('Publish the current bundle ZIP with rollout metadata.')
     expect(result.stdout).toContain('Release commands require the configured app to be active, not archived.')
     expect(result.stdout).not.toContain('upload')
@@ -66,6 +68,15 @@ describe('CLI help', () => {
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain(`Otalan CLI ${await readPackageVersion()}`)
     expect(result.stdout).toContain('Usage: otalan <command> [options]')
+    expect(result.stdout).toContain('Notes:')
+    expect(result.stdout).toContain('Build web assets before running `otalan bundle` for Capacitor projects.')
+    expect(result.stdout).toContain('Run `otalan login` before doctor, publish, rollback, status, or bundles.')
+    expect(result.stdout).toContain('Otalan validates release ZIPs before `otalan publish` succeeds.')
+    expect(result.stdout).toContain('Release commands require the configured app to be active, not archived.')
+    expect(result.stdout).toContain('Run `otalan <command> --help` to show this help text.')
+    expect(result.stdout).not.toContain('Use a CI key with the CLI.')
+    expect(result.stdout).not.toContain('Get CI keys from https://otalan.com/api-keys.')
+    expect(result.stdout).not.toContain('Release commands print the resolved organization and project before continuing.')
     expect(result.stderr).toBe('')
   })
 
@@ -97,6 +108,44 @@ describe('CLI help', () => {
     expect(result.stdout).toContain('Usage: otalan <command> [options]')
     expect(result.stdout).not.toContain('App ID:')
     expect(result.stderr).toBe('')
+  })
+})
+
+describe('CLI keygen', () => {
+  test('generates a CI key and prints the suffix separately', async () => {
+    const result = await runCli(['keygen', '--kind', 'ci'])
+    const lines = result.stdout.trim().split('\n')
+    const fullKey = lines.at(3)
+    const suffix = lines.at(6)
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(lines.at(0)).toBe('Generated CI key.')
+    expect(fullKey).toMatch(/^otalan_ci_[A-Za-z0-9_-]{32}$/)
+    expect(suffix).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(fullKey).toBe(`otalan_ci_${suffix}`)
+  })
+
+  test('generates an OTA key and prints the suffix separately', async () => {
+    const result = await runCli(['keygen', '--kind', 'ota'])
+    const lines = result.stdout.trim().split('\n')
+    const fullKey = lines.at(3)
+    const suffix = lines.at(6)
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(lines.at(0)).toBe('Generated OTA key.')
+    expect(fullKey).toMatch(/^otalan_ota_[A-Za-z0-9_-]{32}$/)
+    expect(suffix).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(fullKey).toBe(`otalan_ota_${suffix}`)
+  })
+
+  test('rejects invalid key kinds', async () => {
+    const result = await runCli(['keygen', '--kind', 'admin'])
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('Key kind is required. Use --kind ci or --kind ota.')
   })
 })
 

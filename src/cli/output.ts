@@ -39,13 +39,14 @@ export function formatReleaseContextSummary(context: ReleaseContext) {
   ].join('\n')
 }
 
-export function printHelp(version: string) {
+export function printHelp(version: string, options: { includeNotes?: boolean } = {}) {
   const commands = [
     ['help', '', 'Show help.'],
     ['version', '', 'Show CLI version.'],
     ['login', '[--api-key ...] [--api-url ...]', 'Save the CI key and API URL locally.'],
     ['init', '[--app-id ...]', 'Create otalan.config.json and link this repo to an app.'],
     ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and CI key context.'],
+    ['keygen', '[--kind ci|ota]', 'Generate an Otalan key locally without calling the API.'],
     ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo/React Native apps.'],
     ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
@@ -60,16 +61,13 @@ export function printHelp(version: string) {
     ['', '[--native-version 1.0.0]', ''],
   ] as const
   const notes = [
-    'Use a CI key with the CLI.',
-    'Get CI keys from https://otalan.com/api-keys.',
     'Build web assets before running `otalan bundle` for Capacitor projects.',
-    'Use `--target expo` for Expo and React Native apps that ship OTA updates through Expo export.',
-    'Otalan validates release ZIPs before `otalan publish` succeeds.',
     'Run `otalan login` before doctor, publish, rollback, status, or bundles.',
-    'Release commands print the resolved organization and project before continuing.',
+    'Otalan validates release ZIPs before `otalan publish` succeeds.',
     'Release commands require the configured app to be active, not archived.',
   ] as const
   const commandWidth = 12
+  const includeNotes = options.includeNotes ?? true
 
   console.log(`Otalan CLI ${version}`)
   console.log('')
@@ -93,11 +91,13 @@ export function printHelp(version: string) {
     }
   })
 
-  console.log('')
-  console.log('Notes:')
+  if (includeNotes) {
+    console.log('')
+    console.log('Notes:')
 
-  for (const note of notes) {
-    console.log(`  ${note}`)
+    for (const note of notes) {
+      console.log(`  ${note}`)
+    }
   }
 
   console.log('')

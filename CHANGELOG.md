@@ -2,6 +2,16 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.0.9 - 2026-05-06
+
+### Added
+
+- Add `otalan keygen --kind ci|ota` for offline Otalan key generation.
+
+### Changed
+
+- Keep help output concise by limiting notes to the most important release workflow reminders.
+
 ## 1.0.8 - 2026-05-06
 
 ### Changed

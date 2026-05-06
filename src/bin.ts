@@ -5,6 +5,7 @@ import type { CommandContext } from './cli/helpers'
 import { printHelp } from './cli/output'
 import { handleDoctor, handleInit, handleLogin } from './commands/auth'
 import { handleBundle } from './commands/bundle'
+import { handleKeygen } from './commands/keygen'
 import { handleBundlesList, handlePublish, handleRollback, handleStatus } from './commands/release'
 
 // -----------------------------------------------------------------------------
@@ -47,6 +48,9 @@ async function main() {
     case 'doctor':
       await handleDoctor(parsed.options)
       return
+    case 'keygen':
+      await handleKeygen(parsed.options)
+      return
     case 'bundle':
       await handleBundle(context, parsed.options)
       return
@@ -77,6 +81,8 @@ async function main() {
       return
     case '--help':
     case '-h':
+      printHelp(await readCliVersion())
+      return
     case undefined:
       printHelp(await readCliVersion())
       return

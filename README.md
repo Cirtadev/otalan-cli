@@ -9,7 +9,7 @@ Published as an npm package, but the CLI itself runs on Bun.
 ## Requirements
 
 - Bun `>= 1.3.11` installed and available on your `PATH`
-- An Otalan **CI key**
+- An Otalan **CI key** for commands that talk to the Otalan API
 
 Do not use the OTA app key in the CLI.
 
@@ -179,6 +179,7 @@ Adjust the build step and bundle target for your app:
 
 - logs into the Otalan API
 - checks API connectivity and CI key context
+- generates CI and OTA key material locally for dashboard import
 - links the current repo to an Otalan app
 - bundles Capacitor or Expo / React Native OTA output
 - publishes a bundle with rollout metadata
@@ -218,7 +219,7 @@ Example project config:
 
 ### `otalan help`
 
-Shows the available commands.
+Shows the available commands and usage notes. Running `otalan` without arguments prints the same concise command list and notes.
 
 ### `otalan version`
 
@@ -229,6 +230,31 @@ otalan version
 otalan --version
 otalan -v
 ```
+
+### `otalan keygen`
+
+Generates Otalan key material locally without calling the API. Use this for workflows where a team wants to create the key in its own terminal, CI setup, or secrets manager before importing it in the Otalan dashboard.
+
+```bash
+otalan keygen --kind ci
+otalan keygen --kind ota
+```
+
+If `--kind` is omitted, the CLI prompts for `CI key (private)` or `OTA key (public)`.
+
+Output includes both the full Otalan key and the base64url suffix without the `otalan_ci_` or `otalan_ota_` prefix:
+
+```text
+Generated CI key.
+
+Full key:
+otalan_ci_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+Key without prefix:
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+`otalan keygen` only creates local key material. Importing or activating a key should still happen through an authenticated dashboard flow; an existing CI key should not be able to create more keys.
 
 ### `otalan login`
 
