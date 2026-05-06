@@ -2,6 +2,13 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.0.7 - 2026-05-06
+
+### Changed
+
+- Clean public README examples to avoid project-specific app IDs, generated-looking slugs, and local development API URLs.
+- Keep user-facing login guidance pointed at the public Otalan API keys page.
+
 ## 1.0.6 - 2026-05-05
 
 ### Changed

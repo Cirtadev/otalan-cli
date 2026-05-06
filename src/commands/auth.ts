@@ -16,9 +16,9 @@ export async function handleLogin(options: Record<string, string | boolean>) {
   const apiUrl = readStringOption(options, 'api-url') ?? await promptWithHint({
     question: 'Otalan API URL',
     fallback: 'https://api.otalan.com',
-    hint: 'API base URL. Use https://api.otalan.com for production or http://localhost:8787 for local development.',
+    hint: 'API base URL. Use https://api.otalan.com unless Otalan support gives you a custom endpoint.',
   })
-  const apiKeysUrl = resolveApiKeysUrl(apiUrl)
+  const apiKeysUrl = resolveApiKeysUrl()
 
   if (!readStringOption(options, 'api-key')) {
     console.log('')

@@ -206,8 +206,8 @@ Example project config:
 
 ```json
 {
-  "organizationSlug": "test-org-407b69f7",
-  "projectSlug": "test-project-ca3bcb8a",
+  "organizationSlug": "example-organization",
+  "projectSlug": "example-project",
   "appId": "com.example.app"
 }
 ```
@@ -238,12 +238,6 @@ Saves the CI key and API base URL locally.
 otalan login --api-key otalan_ci_xxx --api-url https://api.otalan.com
 ```
 
-Local development:
-
-```bash
-otalan login --api-key otalan_ci_xxx --api-url http://localhost:8787
-```
-
 ### `otalan doctor`
 
 Checks API connectivity and prints the organization/project context resolved from the configured CI key.
@@ -268,7 +262,7 @@ If you already ran `otalan login`, the CLI resolves `organizationSlug` and `proj
 
 ```bash
 otalan init \
-  --app-id app.cryptosan.app
+  --app-id com.example.app
 ```
 
 ### `otalan bundle`
@@ -470,6 +464,5 @@ bun pm pack --dry-run
 - This is a Bun-based CLI published on npm.
 - Expo / React Native bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
-- Local development API URL is `http://localhost:8787`.
 - Publishing, rollback, status, and `bundles` expect a CI key and an active app.
 - Run `bun run build` after changing CLI source if you want `dist/bin.js` updated locally.

@@ -87,13 +87,7 @@ describe('manifest tuple helpers', () => {
 })
 
 describe('resolveApiKeysUrl', () => {
-  test('maps localhost API URLs to the local dashboard URL', () => {
-    expect(resolveApiKeysUrl('http://localhost:8787')).toBe('http://localhost:4000/api-keys')
-    expect(resolveApiKeysUrl('http://127.0.0.1:8787')).toBe('http://localhost:4000/api-keys')
-  })
-
-  test('falls back to the production dashboard URL for remote or invalid values', () => {
-    expect(resolveApiKeysUrl('https://api.otalan.com')).toBe('https://otalan.com/api-keys')
-    expect(resolveApiKeysUrl('not-a-url')).toBe('https://otalan.com/api-keys')
+  test('uses the public dashboard URL', () => {
+    expect(resolveApiKeysUrl()).toBe('https://otalan.com/api-keys')
   })
 })

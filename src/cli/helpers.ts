@@ -15,17 +15,7 @@ export type CommandContext = {
   cwd: string
 }
 
-export function resolveApiKeysUrl(apiUrl: string) {
-  try {
-    const parsed = new URL(apiUrl)
-
-    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
-      return 'http://localhost:4000/api-keys'
-    }
-  } catch {
-    return 'https://otalan.com/api-keys'
-  }
-
+export function resolveApiKeysUrl() {
   return 'https://otalan.com/api-keys'
 }
 
