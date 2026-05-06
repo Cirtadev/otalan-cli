@@ -465,4 +465,5 @@ bun pm pack --dry-run
 - Expo / React Native bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
 - Publishing, rollback, status, and `bundles` expect a CI key and an active app.
+- Release commands print the organization and project resolved from the CI key before continuing.
 - Run `bun run build` after changing CLI source if you want `dist/bin.js` updated locally.

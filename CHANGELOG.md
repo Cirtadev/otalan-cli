@@ -2,6 +2,12 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.0.8 - 2026-05-06
+
+### Changed
+
+- Print the resolved organization and project before release commands continue.
+
 ## 1.0.7 - 2026-05-06
 
 ### Changed

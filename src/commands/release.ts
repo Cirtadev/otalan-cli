@@ -20,6 +20,7 @@ import {
   formatBundleSummary,
   formatIngestSummary,
   formatPublishSummary,
+  formatReleaseContextSummary,
   printBundlesTable,
 } from '../cli/output'
 import { promptSelectWithHint, promptWithHint } from '../cli/prompts'
@@ -51,12 +52,18 @@ async function resolveReleaseAccess(
   const api = await resolveApiConfig(options)
   const project = await resolveProject(context)
 
-  await assertReleaseContextMatchesConfig({
+  const releaseContext = await assertReleaseContextMatchesConfig({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     organizationSlug: project.organizationSlug,
     projectSlug: project.projectSlug,
   })
+
+  for (const line of formatReleaseContextSummary(releaseContext).split('\n')) {
+    console.log(line)
+  }
+
+  console.log('')
 
   return {
     api,

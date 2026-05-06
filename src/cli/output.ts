@@ -1,5 +1,5 @@
 import type { BundleIdSource } from '../bundle'
-import type { BundleIngestItem, ReleaseItem } from '../http'
+import type { BundleIngestItem, ReleaseContext, ReleaseItem } from '../http'
 
 // -----------------------------------------------------------------------------
 // Generic output
@@ -22,6 +22,21 @@ export function formatBundleIdSource(source: BundleIdSource) {
     default:
       return 'Using fallback bundle ID.'
   }
+}
+
+function formatReleaseContextEntity(name: string, slug: string) {
+  if (name && name !== slug) {
+    return `${name} (${slug})`
+  }
+
+  return slug
+}
+
+export function formatReleaseContextSummary(context: ReleaseContext) {
+  return [
+    `Organization: ${formatReleaseContextEntity(context.organizationName, context.organizationSlug)}`,
+    `Project: ${formatReleaseContextEntity(context.projectName, context.projectSlug)}`,
+  ].join('\n')
 }
 
 export function printHelp(version: string) {
@@ -51,6 +66,7 @@ export function printHelp(version: string) {
     'Use `--target expo` for Expo and React Native apps that ship OTA updates through Expo export.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
     'Run `otalan login` before doctor, publish, rollback, status, or bundles.',
+    'Release commands print the resolved organization and project before continuing.',
     'Release commands require the configured app to be active, not archived.',
   ] as const
   const commandWidth = 12

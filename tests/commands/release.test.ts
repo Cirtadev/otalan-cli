@@ -1,7 +1,22 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdir, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 import type { BundleIngestItem, ReleaseItem } from '../../src/http'
-import { releaseTestUtils } from '../../src/commands/release'
+import { handleStatus, releaseTestUtils } from '../../src/commands/release'
+
+// -----------------------------------------------------------------------------
+// Test setup
+// -----------------------------------------------------------------------------
+
+const originalFetch = globalThis.fetch
+const originalConsoleLog = console.log
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  console.log = originalConsoleLog
+})
 
 // -----------------------------------------------------------------------------
 // Fixtures
@@ -120,6 +135,96 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
     } finally {
       console.log = originalLog
     }
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Release context output
+// -----------------------------------------------------------------------------
+
+async function createProjectFixture() {
+  const cwd = path.join(os.tmpdir(), `otalan-cli-release-${crypto.randomUUID()}`)
+
+  await mkdir(cwd, { recursive: true })
+  await writeFile(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
+    organizationSlug: 'test-org',
+    projectSlug: 'mobile-app',
+    appId: 'com.example.app',
+  }, null, 2)}\n`)
+
+  return cwd
+}
+
+describe('release command context output', () => {
+  test('prints organization and project before running a release command', async () => {
+    const cwd = await createProjectFixture()
+    const output: string[] = []
+    const requestedPaths: string[] = []
+
+    console.log = (...args: unknown[]) => {
+      output.push(args.map(String).join(' '))
+    }
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      requestedPaths.push(`${url.pathname}${url.search}`)
+
+      expect(init?.headers).toEqual({
+        'x-api-key': 'test-key',
+      })
+
+      if (url.pathname === '/v1/releases/context') {
+        return new Response(JSON.stringify({
+          item: {
+            organizationId: 'org-123',
+            organizationName: 'Test Organization',
+            organizationSlug: 'test-org',
+            projectId: 'project-123',
+            projectName: 'Mobile App',
+            projectSlug: 'mobile-app',
+          },
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.pathname === '/v1/releases') {
+        expect(url.searchParams.get('appId')).toBe('com.example.app')
+        expect(url.searchParams.get('platform')).toBe('ios')
+        expect(url.searchParams.get('channel')).toBe('production')
+        expect(url.searchParams.get('nativeVersion')).toBe('1.0.0')
+
+        return new Response(JSON.stringify({
+          items: [createRelease({
+            bundleId: '1.0.0-web.2',
+            isActive: true,
+            rolloutState: 'active',
+            resolvedDownloadUrl: 'https://cdn.example.com/bundle.zip',
+          })],
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await handleStatus({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'native-version': '1.0.0',
+    })
+
+    expect(requestedPaths[0]).toBe('/v1/releases/context')
+    expect(output).toContain('Organization: Test Organization (test-org)')
+    expect(output).toContain('Project: Mobile App (mobile-app)')
   })
 })
 

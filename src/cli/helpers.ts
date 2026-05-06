@@ -40,10 +40,6 @@ export async function assertReleaseContextMatchesConfig(input: {
   organizationSlug?: string
   projectSlug?: string
 }) {
-  if (!input.organizationSlug && !input.projectSlug) {
-    return null
-  }
-
   const context = await getReleaseContext({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
