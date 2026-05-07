@@ -2,6 +2,13 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.1.1 - 2026-05-07
+
+### Changed
+
+- Remove unsupported target mentions from public documentation, CLI help, and package metadata.
+- Document official support for Capacitor 7 and 8, and Expo SDK 54 and 55.
+
 ## 1.1.0 - 2026-05-07
 
 ### Added
@@ -13,7 +20,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 - Let `otalan login` reuse the saved API URL and keep the saved CI key from a masked prompt.
 - Export Expo bundles into a project-local `.otalan/expo-export-*` folder so Expo accepts the output path.
 - Fall back to the resolved native version when Expo runtimeVersion is not configured or present in export metadata.
-- Clarify Capacitor and Expo / React Native bundling behavior in CLI help and README.
+- Clarify Capacitor and Expo bundling behavior in CLI help and README.
 
 ## 1.0.9 - 2026-05-06
 
@@ -87,7 +94,7 @@ Initial public release of the Otalan CLI.
 ### Added
 
 - Capacitor OTA bundle packaging from built web assets.
-- Expo / React Native OTA bundle packaging through `expo export`.
+- Expo OTA bundle packaging through `expo export`.
 - Release publishing with rollout metadata and server-side validation polling.
 - Bundle listing, active bundle status, and rollback commands.
 - CI key login, project initialization, and API connectivity doctor checks.

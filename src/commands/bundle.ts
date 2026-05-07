@@ -266,7 +266,7 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     : await promptSelectWithHint({
       question: 'Target',
       fallback: 'capacitor',
-      hint: 'OTA client type: capacitor or expo. Use expo for Expo or React Native projects.',
+      hint: 'OTA client type: capacitor or expo. Use expo for Expo projects.',
       options: TARGET_OPTIONS,
     })
   const target = resolveTarget(

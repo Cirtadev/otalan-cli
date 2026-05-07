@@ -1,6 +1,6 @@
 # `@otalan/cli`
 
-Otalan CLI for bundling and publishing OTA update releases for Capacitor and Expo / React Native apps.
+Otalan CLI for bundling and publishing OTA update releases for Capacitor and Expo apps.
 
 Website: [otalan.com](https://otalan.com)
 
@@ -20,6 +20,15 @@ The npm package ships a Bun-based CLI entrypoint, not standalone native binaries
 - macOS and Linux are supported when Bun `>= 1.3.11` is installed.
 - Windows support is experimental until the CLI release flow is validated on Windows.
 - Native compile scripts exist for macOS, Linux, and Windows maintainers, but the compiled binaries are not included in the npm package.
+
+## App Framework Support
+
+Officially supported app targets and versions:
+
+- Capacitor 7 and 8 with `--target capacitor`
+- Expo SDK 54 and 55 with `--target expo`
+
+Other app targets and older framework versions may work, but they are not officially supported for the moment.
 
 ## Install
 
@@ -70,7 +79,7 @@ otalan publish --channel production
 `otalan bundle --target capacitor` packages existing built web assets. By default it reads `dist/` first, then `www/`; pass `--input-dir <path>` if your build outputs somewhere else. Your app build must run first.
 `otalan publish` waits for server-side validation to finish before it returns.
 
-### Expo / React Native
+### Expo
 
 1. Log in with your CI key:
 
@@ -126,7 +135,7 @@ otalan publish --channel production
 
 Use your normal app build command before `otalan bundle`. The CLI then packages the built web output from `dist/` or `www/` by default; pass `--input-dir <path>` if your Capacitor web output uses another folder.
 
-### CI/CD Example: Expo / React Native
+### CI/CD Example: Expo
 
 ```bash
 bun install --frozen-lockfile
@@ -137,7 +146,7 @@ otalan bundle --target expo --platform ios --bundle-from-package
 otalan publish --channel production
 ```
 
-This runs `bunx expo export` through the CLI, using a temporary project-local `.otalan/expo-export-*` folder, packages the exported OTA assets, and publishes the resulting bundle through Otalan's validation pipeline. Do not add a separate web build step just to create `dist/` or `www/` for Expo / React Native.
+This runs `bunx expo export` through the CLI, using a temporary project-local `.otalan/expo-export-*` folder, packages the exported OTA assets, and publishes the resulting bundle through Otalan's validation pipeline. Do not add a separate web build step just to create `dist/` or `www/` for Expo.
 
 ### GitHub Actions Example
 
@@ -173,7 +182,7 @@ jobs:
 Adjust the build step and bundle target for your app:
 
 - Capacitor: keep your web build step and use `--target capacitor`
-- Expo / React Native: remove the web build step if not needed and use `--target expo`
+- Expo: remove the web build step if not needed and use `--target expo`
 
 ## What It Does
 
@@ -181,7 +190,7 @@ Adjust the build step and bundle target for your app:
 - checks API connectivity and CI key context
 - generates CI and OTA key material locally for dashboard import
 - links the current repo to an Otalan app
-- bundles Capacitor or Expo / React Native OTA output
+- bundles Capacitor or Expo OTA output
 - publishes a bundle with rollout metadata
 - lists published bundles
 - rolls back to an older bundle
@@ -311,7 +320,7 @@ otalan bundle --target capacitor --platform ios
 otalan bundle --target capacitor --platform ios --input-dir build
 ```
 
-Expo / React Native:
+Expo:
 
 ```bash
 otalan bundle --target expo --platform ios
@@ -319,11 +328,13 @@ otalan bundle --target expo --platform ios
 
 Current behavior:
 
+- Official support covers Capacitor 7 and 8, and Expo SDK 54 and 55
+- Other app targets and older framework versions may work, but they are not officially supported for the moment
 - Capacitor packages prebuilt web assets; it does not run your app build command
 - without `--input-dir`, Capacitor checks `dist/` first and then `www/`
 - pass `--input-dir <path>` to package a different Capacitor web output folder
-- Expo / React Native runs `bunx expo export --platform <platform>` into a temporary project-local `.otalan/expo-export-*` folder
-- Expo / React Native does not require a prebuilt `dist/` or `www/` folder
+- Expo runs `bunx expo export --platform <platform>` into a temporary project-local `.otalan/expo-export-*` folder
+- Expo does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the resolved Expo app config in `.otalan/bundle/manifest.json` so publish can forward it for `extra.expoClient`
 - both outputs produce a ZIP plus `manifest.json`
 - `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
@@ -521,7 +532,7 @@ bun pm pack --dry-run
 ## Notes
 
 - This is a Bun-based CLI published on npm.
-- Expo / React Native bundling uses `bunx expo ...`.
+- Expo bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
 - Publishing, rollback, status, and `bundles` expect a CI key and an active app.
 - Release commands print the organization and project resolved from the CI key before continuing.

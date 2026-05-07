@@ -47,7 +47,7 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['init', '[--app-id ...]', 'Select and link this repo to an active app.'],
     ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and CI key context.'],
     ['keygen', '[--kind ci|ota]', 'Generate an Otalan key locally without calling the API.'],
-    ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo/React Native apps.'],
+    ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo apps.'],
     ['', '[--input-dir path] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
     ['', '[--native-version 1.0.0] [--runtime-version 1.0.0] [--channel production]', ''],
@@ -61,8 +61,9 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['', '[--native-version 1.0.0]', ''],
   ] as const
   const notes = [
+    'Official app support: Capacitor 7/8 and Expo SDK 54/55.',
     'Capacitor packages prebuilt web assets from dist/ or www/ by default; use --input-dir for another folder.',
-    'Expo/React Native runs `bunx expo export` into .otalan/expo-export-*; no dist/ or www/ build is required first.',
+    'Expo runs `bunx expo export` into .otalan/expo-export-*; no dist/ or www/ build is required first.',
     'Expo runtimeVersion comes from --runtime-version, Expo config/export metadata, or the native version fallback.',
     'Run `otalan login` to authenticate to a project; `otalan init` selects an active app in that project.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
