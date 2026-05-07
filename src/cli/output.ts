@@ -43,12 +43,12 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
   const commands = [
     ['help', '', 'Show help.'],
     ['version', '', 'Show CLI version.'],
-    ['login', '[--api-key ...] [--api-url ...]', 'Save the CI key and API URL locally.'],
-    ['init', '[--app-id ...]', 'Create otalan.config.json and link this repo to an app.'],
+    ['login', '[--api-key ...] [--api-url ...]', 'Save project CI key auth locally.'],
+    ['init', '[--app-id ...]', 'Select and link this repo to an active app.'],
     ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and CI key context.'],
     ['keygen', '[--kind ci|ota]', 'Generate an Otalan key locally without calling the API.'],
     ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo/React Native apps.'],
-    ['', '[--input-dir dist] [--output-dir .otalan/bundle]', ''],
+    ['', '[--input-dir path] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
     ['', '[--native-version 1.0.0] [--runtime-version 1.0.0] [--channel production]', ''],
     ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Publish the current bundle ZIP with rollout metadata.'],
@@ -61,8 +61,10 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['', '[--native-version 1.0.0]', ''],
   ] as const
   const notes = [
-    'Build web assets before running `otalan bundle` for Capacitor projects.',
-    'Run `otalan login` before doctor, publish, rollback, status, or bundles.',
+    'Capacitor packages prebuilt web assets from dist/ or www/ by default; use --input-dir for another folder.',
+    'Expo/React Native runs `bunx expo export` into .otalan/expo-export-*; no dist/ or www/ build is required first.',
+    'Expo runtimeVersion comes from --runtime-version, Expo config/export metadata, or the native version fallback.',
+    'Run `otalan login` to authenticate to a project; `otalan init` selects an active app in that project.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
     'Release commands require the configured app to be active, not archived.',
   ] as const

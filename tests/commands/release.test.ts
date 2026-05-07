@@ -101,6 +101,8 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
       expect(targetBundleId).toBe('1.0.0-web.1')
       expect(events).toContain('Available bundles')
       expect(events.some(event => event.includes('bundleId'))).toBe(true)
+      expect(events.some(event => event.includes('createdAt'))).toBe(true)
+      expect(events.some(event => event.includes('2026-04-22 00:00:00'))).toBe(true)
       expect(events.some(event => event.includes('1.0.0-web.2'))).toBe(true)
       expect(events.some(event => event.includes('1.0.0-web.1'))).toBe(true)
       expect(events.indexOf('Available bundles')).toBeLessThan(events.indexOf('PROMPT 1.0.0-web.2'))

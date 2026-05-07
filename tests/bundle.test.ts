@@ -134,6 +134,12 @@ describe('bundleTestUtils.resolveExpoRuntimeVersion', () => {
     }, 'ios', undefined, '2.0.0')).toBe('2.0.0')
   })
 
+  test('falls back to the native version when Expo has no runtimeVersion', () => {
+    expect(bundleTestUtils.resolveExpoRuntimeVersion({
+      version: '1.0.0',
+    }, 'ios', undefined, undefined, '1.0.0')).toBe('1.0.0')
+  })
+
   test('resolves runtimeVersion policies from Expo config', () => {
     expect(bundleTestUtils.resolveExpoRuntimeVersion({
       version: '1.2.3',
@@ -172,5 +178,19 @@ describe('bundleTestUtils.findRuntimeVersionInObject', () => {
         ],
       },
     })).toBe('3.4.5')
+  })
+})
+
+describe('bundleTestUtils.createExpoExportDirectory', () => {
+  test('creates Expo export directories inside the project', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-expo-project-'))
+
+    try {
+      const exportDir = await bundleTestUtils.createExpoExportDirectory(rootDir)
+
+      expect(exportDir.startsWith(path.join(rootDir, '.otalan', 'expo-export-'))).toBe(true)
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
   })
 })

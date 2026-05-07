@@ -50,7 +50,7 @@ otalan login --api-key otalan_ci_xxx
 2. Link the current repo to your active Otalan app:
 
 ```bash
-otalan init --app-id com.example.app
+otalan init
 ```
 
 3. Build your web assets with your app's normal build command.
@@ -67,7 +67,7 @@ otalan bundle --target capacitor --platform ios --bundle-id 1.0.5
 otalan publish --channel production
 ```
 
-`otalan bundle --target capacitor` packages the built web assets from `dist/` or `www/`, so your app build must run first.
+`otalan bundle --target capacitor` packages existing built web assets. By default it reads `dist/` first, then `www/`; pass `--input-dir <path>` if your build outputs somewhere else. Your app build must run first.
 `otalan publish` waits for server-side validation to finish before it returns.
 
 ### Expo / React Native
@@ -81,7 +81,7 @@ otalan login --api-key otalan_ci_xxx
 2. Link the current repo to your active Otalan app:
 
 ```bash
-otalan init --app-id com.example.app
+otalan init
 ```
 
 3. Bundle the OTA payload:
@@ -96,7 +96,7 @@ otalan bundle --target expo --platform ios --bundle-id 1.0.5
 otalan publish --channel production
 ```
 
-`otalan bundle --target expo` runs `bunx expo export`, packages the exported JS bundle and assets, and stores the resolved Expo config in the Otalan manifest for publish.
+`otalan bundle --target expo` runs `bunx expo export` itself, exports into a temporary project-local `.otalan/expo-export-*` folder, packages the exported JS bundle and assets, and stores the resolved Expo config in the Otalan manifest for publish. You do not need to create a `dist/` or `www/` folder before running it.
 `otalan publish` waits for server-side validation to finish before it returns.
 
 ## CI/CD Usage
@@ -124,7 +124,7 @@ otalan bundle --target capacitor --platform ios --bundle-from-package
 otalan publish --channel production
 ```
 
-Use your normal app build command before `otalan bundle`. The CLI then packages the built web output from `dist/` or `www/`.
+Use your normal app build command before `otalan bundle`. The CLI then packages the built web output from `dist/` or `www/` by default; pass `--input-dir <path>` if your Capacitor web output uses another folder.
 
 ### CI/CD Example: Expo / React Native
 
@@ -137,7 +137,7 @@ otalan bundle --target expo --platform ios --bundle-from-package
 otalan publish --channel production
 ```
 
-This runs `bunx expo export` through the CLI, packages the exported OTA assets, and publishes the resulting bundle through Otalan's validation pipeline.
+This runs `bunx expo export` through the CLI, using a temporary project-local `.otalan/expo-export-*` folder, packages the exported OTA assets, and publishes the resulting bundle through Otalan's validation pipeline. Do not add a separate web build step just to create `dist/` or `www/` for Expo / React Native.
 
 ### GitHub Actions Example
 
@@ -258,7 +258,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### `otalan login`
 
-Saves the CI key and API base URL locally.
+Saves the project CI key and API base URL locally.
+
+If auth is already saved, `otalan login` shows the current API URL as the prompt default and shows the current CI key in masked form. Press Enter to keep either value.
 
 ```bash
 otalan login --api-key otalan_ci_xxx --api-url https://api.otalan.com
@@ -282,11 +284,15 @@ otalan doctor --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://a
 
 Creates `otalan.config.json` in the current project.
 
-`appId` is the registered app ID shown under the app name on the Apps page in Otalan. It is scoped to the current project, not globally unique across all projects. The app must be active; archived apps are treated as unavailable for CI publish, rollback, status, and bundle listing commands.
+`otalan init` lists the active apps in the project resolved from the logged-in CI key and lets you select one. `appId` is scoped to that project, not globally unique across all projects. Archived apps are not listed and are treated as unavailable for CI publish, rollback, status, and bundle listing commands.
 
-If you already ran `otalan login`, the CLI resolves `organizationSlug` and `projectSlug` automatically from the CI key and stores them as a safety check.
+Run `otalan init` once per app repo or working folder. If you switch to another checkout, folder, or app project, run `otalan init` there too so that folder has its own `otalan.config.json`.
+
+If you pass `--app-id`, the CLI validates that the app exists in the logged-in project before writing `otalan.config.json`. The CLI also stores `organizationSlug` and `projectSlug` from the CI key as a safety check.
 
 ```bash
+otalan init
+# Non-interactive CI usage:
 otalan init \
   --app-id com.example.app
 ```
@@ -301,6 +307,8 @@ Capacitor:
 
 ```bash
 otalan bundle --target capacitor --platform ios
+# Custom Capacitor web output folder:
+otalan bundle --target capacitor --platform ios --input-dir build
 ```
 
 Expo / React Native:
@@ -311,9 +319,11 @@ otalan bundle --target expo --platform ios
 
 Current behavior:
 
-- Build your Capacitor web assets before running `otalan bundle`
-- Capacitor reads `dist/` or `www/`
-- Expo runs `bunx expo export --platform <platform>`
+- Capacitor packages prebuilt web assets; it does not run your app build command
+- without `--input-dir`, Capacitor checks `dist/` first and then `www/`
+- pass `--input-dir <path>` to package a different Capacitor web output folder
+- Expo / React Native runs `bunx expo export --platform <platform>` into a temporary project-local `.otalan/expo-export-*` folder
+- Expo / React Native does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the resolved Expo app config in `.otalan/bundle/manifest.json` so publish can forward it for `extra.expoClient`
 - both outputs produce a ZIP plus `manifest.json`
 - `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
@@ -324,8 +334,31 @@ Native version defaults:
 - Capacitor iOS reads `CFBundleShortVersionString` from `Info.plist` and resolves `$(MARKETING_VERSION)` from the Xcode project when needed
 - Capacitor Android reads `versionName` from `android/app/build.gradle` or `build.gradle.kts`
 - Expo reads the selected platform version from Expo config and falls back to the top-level Expo `version`
-- Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings
+- Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings; if none are present, the CLI falls back to the resolved native version
 - `--native-version` overrides auto-detection
+
+For Expo projects, the recommended app config is:
+
+```json
+{
+  "expo": {
+    "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}
+```
+
+Use a string value instead if you manage runtime compatibility manually:
+
+```json
+{
+  "expo": {
+    "runtimeVersion": "1.0.0"
+  }
+}
+```
 
 Choose the bundle ID you want to release:
 

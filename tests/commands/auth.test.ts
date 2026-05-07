@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { handleDoctor } from '../../src/commands/auth'
+import { authCommandTestUtils, handleDoctor } from '../../src/commands/auth'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -62,5 +62,40 @@ describe('handleDoctor', () => {
       'Project: test-project',
     ])
     expect(events.join('\n')).not.toContain('test-key')
+  })
+})
+
+describe('authCommandTestUtils', () => {
+  test('masks stored CI keys without exposing the full value', () => {
+    expect(authCommandTestUtils.maskApiKey('otalan_ci_1234567890abcdef')).toBe('otalan_ci_...cdef')
+  })
+
+  test('formats app select options with app names and identifiers', () => {
+    expect(authCommandTestUtils.formatAppOption({
+      name: 'Example App',
+      appId: 'com.example.app',
+    })).toBe('Example App (com.example.app)')
+  })
+
+  test('validates explicit init app IDs against active project apps', async () => {
+    await expect(authCommandTestUtils.resolveInitAppId({
+      apps: [{
+        name: 'Example App',
+        appId: 'com.example.app',
+      }],
+      options: {
+        'app-id': 'com.example.app',
+      },
+    })).resolves.toBe('com.example.app')
+
+    await expect(authCommandTestUtils.resolveInitAppId({
+      apps: [{
+        name: 'Example App',
+        appId: 'com.example.app',
+      }],
+      options: {
+        'app-id': 'com.missing.app',
+      },
+    })).rejects.toThrow('App "com.missing.app" was not found in the logged-in project, or it is archived.')
   })
 })

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createRelease, getReleaseContext, getReleaseIngest, listReleases } from '../src/http'
+import { createRelease, getReleaseContext, getReleaseIngest, listReleaseApps, listReleases } from '../src/http'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -99,6 +99,40 @@ describe('getReleaseContext', () => {
 
     expect(item.organizationSlug).toBe('test-org')
     expect(item.projectSlug).toBe('test-project')
+  })
+})
+
+describe('listReleaseApps', () => {
+  test('lists active apps in the authenticated CI project', async () => {
+    globalThis.fetch = (async (input, init) => {
+      expect(String(input)).toBe('https://api.otalan.com/v1/releases/apps')
+      expect(init?.method).toBe('GET')
+      expect(init?.headers).toEqual({
+        'x-api-key': 'test-key',
+      })
+
+      return new Response(JSON.stringify({
+        items: [{
+          name: 'Example App',
+          appId: 'com.example.app',
+        }],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }) as typeof fetch
+
+    const items = await listReleaseApps({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+    })
+
+    expect(items).toEqual([{
+      name: 'Example App',
+      appId: 'com.example.app',
+    }])
   })
 })
 

@@ -2,6 +2,19 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.1.0 - 2026-05-07
+
+### Added
+
+- List active project apps during `otalan init` and validate `--app-id` against the logged-in project.
+
+### Changed
+
+- Let `otalan login` reuse the saved API URL and keep the saved CI key from a masked prompt.
+- Export Expo bundles into a project-local `.otalan/expo-export-*` folder so Expo accepts the output path.
+- Fall back to the resolved native version when Expo runtimeVersion is not configured or present in export metadata.
+- Clarify Capacitor and Expo / React Native bundling behavior in CLI help and README.
+
 ## 1.0.9 - 2026-05-06
 
 ### Added

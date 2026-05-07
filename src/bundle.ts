@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 
 import { zipSync } from 'fflate'
@@ -387,6 +386,7 @@ function resolveExpoRuntimeVersion(
   platform: MobilePlatform,
   runtimeVersion?: string,
   exportedRuntimeVersion?: string,
+  fallbackRuntimeVersion?: string,
 ) {
   if (runtimeVersion?.trim()) {
     return runtimeVersion.trim()
@@ -414,6 +414,10 @@ function resolveExpoRuntimeVersion(
     if (policy) {
       return resolveExpoRuntimeVersionPolicy(config, platform, policy)
     }
+  }
+
+  if (fallbackRuntimeVersion?.trim()) {
+    return fallbackRuntimeVersion.trim()
   }
 
   throw new Error('Expo runtimeVersion is required. Pass --runtime-version or set runtimeVersion in Expo config.')
@@ -649,6 +653,14 @@ async function buildExpoAssetManifest(exportDir: string) {
   }
 }
 
+async function createExpoExportDirectory(cwd: string) {
+  const otalanDir = path.join(cwd, '.otalan')
+
+  await mkdir(otalanDir, { recursive: true })
+
+  return mkdtemp(path.join(otalanDir, 'expo-export-'))
+}
+
 // -----------------------------------------------------------------------------
 // Test helpers
 // -----------------------------------------------------------------------------
@@ -661,6 +673,7 @@ export const bundleTestUtils = {
   resolveExpoRuntimeVersion,
   findRuntimeVersionInObject,
   collectDirectoryEntries,
+  createExpoExportDirectory,
 }
 
 // -----------------------------------------------------------------------------
@@ -719,7 +732,7 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
 }
 
 async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> {
-  const exportDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-expo-export-'))
+  const exportDir = await createExpoExportDirectory(options.cwd)
 
   try {
     await runCommand(
@@ -730,16 +743,17 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
 
     const exportedRuntimeVersion = await readExpoExportRuntimeVersion(exportDir)
     const expoConfig = await readExpoConfig(options.cwd)
+    const nativeVersion = resolveExpoNativeVersion(expoConfig, options.platform, options.nativeVersion)
     const runtimeVersion = resolveExpoRuntimeVersion(
       expoConfig,
       options.platform,
       options.runtimeVersion,
       exportedRuntimeVersion,
+      nativeVersion,
     )
     const bundleBytes = await zipDirectory(exportDir)
     const hash = hashBytes(bundleBytes)
     const assets = await buildExpoAssetManifest(exportDir)
-    const nativeVersion = resolveExpoNativeVersion(expoConfig, options.platform, options.nativeVersion)
     const packageVersion = await readPackageVersion(options.cwd)
     const { bundleId, bundleIdSource } = resolveBundleId({
       bundleId: options.bundleId,

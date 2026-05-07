@@ -37,6 +37,11 @@ export type ReleaseContext = {
   projectSlug: string
 }
 
+export type ReleaseAppItem = {
+  name: string
+  appId: string
+}
+
 export type BundleIngestItem = {
   id: string
   appId: string
@@ -205,6 +210,18 @@ export async function getReleaseContext(input: ReleaseClientConfig) {
   })
 
   return payload.item
+}
+
+export async function listReleaseApps(input: ReleaseClientConfig) {
+  const payload = await requestJson<{
+    items: ReleaseAppItem[]
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/apps',
+  })
+
+  return payload.items
 }
 
 export async function getReleaseIngest(input: ReleaseClientConfig & {
