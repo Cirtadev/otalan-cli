@@ -119,7 +119,7 @@ export function formatBundleSummary(input: {
   rolloutPercent?: number
   rolloutState?: string
   releaseNotes?: string | null
-  createdAt?: string
+  publishedAt?: string
   selectable?: boolean
 }) {
   const lines = [
@@ -137,8 +137,8 @@ export function formatBundleSummary(input: {
     lines.push(`State: ${input.rolloutState}`)
   }
 
-  if (input.createdAt) {
-    lines.push(`Published at: ${input.createdAt}`)
+  if (input.publishedAt) {
+    lines.push(`Published at: ${input.publishedAt}`)
   }
 
   if (input.selectable !== undefined) {
@@ -221,9 +221,9 @@ export function printBundlesTable(items: ReleaseItem[]) {
     item.channel,
     `${item.rolloutPercent}%`,
     item.rolloutState,
-    item.createdAt.slice(0, 19).replace('T', ' '),
+    item.publishedAt.slice(0, 19).replace('T', ' '),
   ])
-  const headers = ['active', 'selectable', 'archive', 'bundleId', 'nativeVersion', 'platform', 'channel', 'rollout', 'state', 'createdAt']
+  const headers = ['active', 'selectable', 'archive', 'bundleId', 'nativeVersion', 'platform', 'channel', 'rollout', 'state', 'publishedAt']
   const widths = headers.map((header, index) =>
     Math.min(
       32,

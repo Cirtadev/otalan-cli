@@ -189,7 +189,7 @@ function resolvePublishedBundleIdFromReleases(releases: ReleaseItem[]) {
   }
 
   return [...releases]
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt))
     .at(0)
     ?.bundleId
 }

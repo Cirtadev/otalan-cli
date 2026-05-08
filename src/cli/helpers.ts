@@ -15,6 +15,15 @@ export type CommandContext = {
   cwd: string
 }
 
+export type BundleArchive = {
+  fileName: string
+  fileSizeBytes: number
+  contentType: string
+  body: Blob
+}
+
+const BUNDLE_ARCHIVE_FILE_NAME = 'bundle.zip'
+
 export function resolveApiKeysUrl() {
   return 'https://otalan.com/api-keys'
 }
@@ -108,20 +117,33 @@ export function resolveManifestPlatform(manifest: BundleManifest, optionPlatform
   throw new Error('Bundle manifest is missing platform. Rebuild the bundle or pass --platform.')
 }
 
+function resolveManifestReleaseNativeVersion(manifest: BundleManifest) {
+  return manifest.target === 'expo'
+    ? manifest.runtimeVersion
+    : manifest.nativeVersion
+}
+
+function resolveManifestReleaseNativeVersionField(manifest: BundleManifest) {
+  return manifest.target === 'expo' ? 'runtimeVersion' : 'nativeVersion'
+}
+
 export function resolveManifestNativeVersion(manifest: BundleManifest, optionNativeVersion?: string) {
-  if (optionNativeVersion && manifest.nativeVersion && optionNativeVersion !== manifest.nativeVersion) {
-    throw new Error(`Bundle manifest nativeVersion "${manifest.nativeVersion}" does not match --native-version "${optionNativeVersion}".`)
+  const manifestNativeVersion = resolveManifestReleaseNativeVersion(manifest)
+  const manifestNativeVersionField = resolveManifestReleaseNativeVersionField(manifest)
+
+  if (optionNativeVersion && manifestNativeVersion && optionNativeVersion !== manifestNativeVersion) {
+    throw new Error(`Bundle manifest ${manifestNativeVersionField} "${manifestNativeVersion}" does not match --native-version "${optionNativeVersion}".`)
   }
 
-  if (manifest.nativeVersion) {
-    return manifest.nativeVersion
+  if (manifestNativeVersion) {
+    return manifestNativeVersion
   }
 
   if (optionNativeVersion) {
     return optionNativeVersion
   }
 
-  throw new Error('Bundle manifest is missing nativeVersion. Rebuild the bundle or pass --native-version.')
+  throw new Error(`Bundle manifest is missing ${manifestNativeVersionField}. Rebuild the bundle or pass --native-version.`)
 }
 
 export async function readBundleManifest(outputDir: string) {
@@ -151,10 +173,25 @@ export function resolveManifestDefaultNativeVersion(manifest: BundleManifest | n
     return undefined
   }
 
-  return manifest.nativeVersion
+  return resolveManifestReleaseNativeVersion(manifest)
 }
 
-export async function readBundleFile(outputDir: string) {
-  const bytes = await Bun.file(path.join(outputDir, 'bundle.zip')).bytes()
-  return new File([bytes], 'bundle.zip', { type: 'application/zip' })
+export async function openBundleArchive(outputDir: string): Promise<BundleArchive> {
+  const archivePath = path.join(outputDir, BUNDLE_ARCHIVE_FILE_NAME)
+  const body = Bun.file(archivePath)
+
+  if (!(await body.exists())) {
+    throw new Error(`Missing bundle archive at ${archivePath}. Rebuild the bundle before publishing.`)
+  }
+
+  if (body.size === 0) {
+    throw new Error(`Bundle archive at ${archivePath} is empty. Rebuild the bundle before publishing.`)
+  }
+
+  return {
+    fileName: BUNDLE_ARCHIVE_FILE_NAME,
+    fileSizeBytes: body.size,
+    contentType: 'application/zip',
+    body,
+  }
 }

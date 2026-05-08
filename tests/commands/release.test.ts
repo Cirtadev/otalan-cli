@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import type { BundleIngestItem, ReleaseItem } from '../../src/http'
-import { handleStatus, releaseTestUtils } from '../../src/commands/release'
+import { handlePublish, handleStatus, releaseTestUtils } from '../../src/commands/release'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -62,7 +62,7 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
     fileSizeBytes: 1234,
     storageObjectExists: true,
     isActive: false,
-    createdAt: '2026-04-21T00:00:00.000Z',
+    publishedAt: '2026-04-21T00:00:00.000Z',
     resolvedDownloadUrl: 'https://cdn.example.com/ios.zip',
     ...overrides,
   }
@@ -88,7 +88,7 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
           createRelease({
             bundleId: '1.0.0-web.2',
             isActive: true,
-            createdAt: '2026-04-22T00:00:00.000Z',
+            publishedAt: '2026-04-22T00:00:00.000Z',
           }),
           createRelease(),
         ],
@@ -101,7 +101,7 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
       expect(targetBundleId).toBe('1.0.0-web.1')
       expect(events).toContain('Available bundles')
       expect(events.some(event => event.includes('bundleId'))).toBe(true)
-      expect(events.some(event => event.includes('createdAt'))).toBe(true)
+      expect(events.some(event => event.includes('publishedAt'))).toBe(true)
       expect(events.some(event => event.includes('2026-04-22 00:00:00'))).toBe(true)
       expect(events.some(event => event.includes('1.0.0-web.2'))).toBe(true)
       expect(events.some(event => event.includes('1.0.0-web.1'))).toBe(true)
@@ -227,6 +227,181 @@ describe('release command context output', () => {
     expect(requestedPaths[0]).toBe('/v1/releases/context')
     expect(output).toContain('Organization: Test Organization (test-org)')
     expect(output).toContain('Project: Mobile App (mobile-app)')
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Publish command
+// -----------------------------------------------------------------------------
+
+describe('handlePublish', () => {
+  test('creates a direct upload intent, uploads the ZIP, and completes the ingest', async () => {
+    const cwd = await createProjectFixture()
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+    const manifest = {
+      target: 'expo',
+      hash: '0'.repeat(64),
+      nativeVersion: '2.0.0',
+      runtimeVersion: '1.0.0',
+      bundleId: '1.0.0-web.2',
+      launchAsset: '_expo/static/js/ios/entry.hbc',
+      assets: ['assets/icon.png'],
+      expoConfig: {
+        scheme: 'example',
+      },
+      createdAt: '2026-04-21T00:00:00.000Z',
+      platform: 'ios',
+    }
+    const events: string[] = []
+
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(path.join(outputDir, 'bundle.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+
+    console.log = () => {}
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      events.push(`${init?.method ?? 'GET'} ${url.href}`)
+
+      if (url.pathname === '/v1/releases/context') {
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+        })
+
+        return new Response(JSON.stringify({
+          item: {
+            organizationId: 'org-123',
+            organizationName: 'Test Organization',
+            organizationSlug: 'test-org',
+            projectId: 'project-123',
+            projectName: 'Mobile App',
+            projectSlug: 'mobile-app',
+          },
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.pathname === '/v1/releases/create') {
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+          'Content-Type': 'application/json',
+        })
+
+        const body = JSON.parse(init?.body as string) as Record<string, unknown>
+
+        expect(body).toMatchObject({
+          appId: 'com.example.app',
+          platform: 'ios',
+          channel: 'production',
+          nativeVersion: '1.0.0',
+          bundleId: '1.0.0-web.2',
+          fileName: 'bundle.zip',
+          fileSizeBytes: 9,
+          contentType: 'application/zip',
+          mandatory: true,
+          rolloutPercent: 100,
+        })
+        expect(JSON.parse(body.expoManifest as string)).toMatchObject({
+          target: 'expo',
+          launchAsset: '_expo/static/js/ios/entry.hbc',
+          assets: ['assets/icon.png'],
+          runtimeVersion: '1.0.0',
+          nativeVersion: '1.0.0',
+          bundleId: '1.0.0-web.2',
+          expoConfig: {
+            scheme: 'example',
+          },
+        })
+
+        return new Response(JSON.stringify({
+          item: createIngest({
+            status: 'uploading',
+          }),
+          uploadUrl: 'https://upload.example.test/quarantine.zip',
+          contentType: 'application/zip',
+        }), {
+          status: 202,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.href === 'https://upload.example.test/quarantine.zip') {
+        expect(init?.method).toBe('PUT')
+        expect(init?.headers).toEqual({
+          'Content-Type': 'application/zip',
+        })
+        const uploadBody = init?.body as Blob
+
+        expect(uploadBody).toBeInstanceOf(Blob)
+        expect(uploadBody).not.toBeInstanceOf(File)
+        expect(await uploadBody.text()).toBe('zip-bytes')
+
+        return new Response('', {
+          status: 200,
+        })
+      }
+
+      if (url.pathname === '/v1/releases/ingests/ingest-123/complete') {
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+        })
+        expect(init?.body).toBeUndefined()
+
+        return new Response(JSON.stringify({
+          item: createIngest({
+            status: 'pending',
+          }),
+        }), {
+          status: 202,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.pathname === '/v1/releases/ingests/ingest-123') {
+        expect(init?.method).toBe('GET')
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+        })
+
+        return new Response(JSON.stringify({
+          item: createIngest({
+            status: 'ready',
+            checksum: '0'.repeat(64),
+            processedAt: '2026-04-21T00:00:02.000Z',
+          }),
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.href}`)
+    }) as typeof fetch
+
+    await handlePublish({ cwd }, {
+      'api-key': 'test-key',
+      'api-url': 'https://api.otalan.com',
+      channel: 'production',
+    })
+
+    expect(events).toEqual([
+      'GET https://api.otalan.com/v1/releases/context',
+      'POST https://api.otalan.com/v1/releases/create',
+      'PUT https://upload.example.test/quarantine.zip',
+      'POST https://api.otalan.com/v1/releases/ingests/ingest-123/complete',
+      'GET https://api.otalan.com/v1/releases/ingests/ingest-123',
+    ])
   })
 })
 

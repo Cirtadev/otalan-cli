@@ -22,7 +22,7 @@ export type ReleaseItem = {
   fileSizeBytes: number | null
   storageObjectExists: boolean
   isActive: boolean
-  createdAt: string
+  publishedAt: string
   resolvedDownloadUrl: string | null
 }
 
@@ -77,6 +77,13 @@ type ReleasePublishMetadata = {
   mandatory: boolean
   rolloutPercent: number
   releaseNotes?: string
+}
+
+type ReleaseArchiveMetadata = {
+  fileName: string
+  fileSizeBytes: number
+  contentType?: string
+  expoManifest?: string
 }
 
 // -----------------------------------------------------------------------------
@@ -144,57 +151,80 @@ async function requestJson<T>(input: {
   return response.json() as Promise<T>
 }
 
-async function requestForm<T>(input: {
-  apiUrl: string
-  apiKey: string
-  path: string
-  formData: FormData
-}) {
-  const response = await fetch(`${normalizeApiUrl(input.apiUrl)}${input.path}`, {
-    method: 'POST',
-    headers: buildHeaders(input.apiKey),
-    body: input.formData,
-  })
+async function assertDirectUploadResponseOk(response: Response) {
+  if (response.ok) {
+    return
+  }
 
-  await assertResponseOk(response)
-  return response.json() as Promise<T>
+  const body = await response.text().catch(() => '')
+  const message = body.trim()
+    ? `Direct bundle upload failed with status ${response.status}: ${body.trim()}`
+    : `Direct bundle upload failed with status ${response.status}`
+
+  throw new Error(message)
 }
 
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
 
-export async function createRelease(input: ReleaseClientConfig & ReleaseIdentity & ReleasePublishMetadata & {
-  file: File
-  expoConfig?: JsonObject
-}) {
-  const formData = new FormData()
-
-  formData.set('appId', input.appId)
-  formData.set('platform', input.platform)
-  formData.set('channel', input.channel)
-  formData.set('nativeVersion', input.nativeVersion)
-  formData.set('bundleId', input.bundleId)
-  formData.set('mandatory', String(input.mandatory))
-  formData.set('rolloutPercent', String(input.rolloutPercent))
-
-  if (input.releaseNotes) {
-    formData.set('releaseNotes', input.releaseNotes)
-  }
-
-  if (input.expoConfig) {
-    formData.set('expoConfig', JSON.stringify(input.expoConfig))
-  }
-
-  formData.set('file', input.file)
-
-  const payload = await requestForm<{
+export async function createReleaseUploadIntent(
+  input: ReleaseClientConfig & ReleaseIdentity & ReleasePublishMetadata & ReleaseArchiveMetadata,
+) {
+  const payload = await requestJson<{
     item: BundleIngestItem
+    uploadUrl: string
+    contentType: string
   }>({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
     path: '/v1/releases/create',
-    formData,
+    method: 'POST',
+    body: {
+      appId: input.appId,
+      platform: input.platform,
+      channel: input.channel,
+      nativeVersion: input.nativeVersion,
+      bundleId: input.bundleId,
+      mandatory: input.mandatory,
+      rolloutPercent: input.rolloutPercent,
+      ...(input.releaseNotes ? { releaseNotes: input.releaseNotes } : {}),
+      ...(input.expoManifest ? { expoManifest: input.expoManifest } : {}),
+      fileName: input.fileName,
+      fileSizeBytes: input.fileSizeBytes,
+      ...(input.contentType ? { contentType: input.contentType } : {}),
+    },
+  })
+
+  return payload
+}
+
+export async function uploadReleaseArchive(input: {
+  uploadUrl: string
+  archive: Blob
+  contentType: string
+}) {
+  const response = await fetch(input.uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': input.contentType,
+    },
+    body: input.archive,
+  })
+
+  await assertDirectUploadResponseOk(response)
+}
+
+export async function completeReleaseUpload(input: ReleaseClientConfig & {
+  ingestId: string
+}) {
+  const payload = await requestJson<{
+    item: BundleIngestItem
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: `/v1/releases/ingests/${encodeURIComponent(input.ingestId)}/complete`,
+    method: 'POST',
   })
 
   return payload.item

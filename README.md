@@ -105,7 +105,7 @@ otalan bundle --target expo --platform ios --bundle-id 1.0.5
 otalan publish --channel production
 ```
 
-`otalan bundle --target expo` runs `bunx expo export` itself, exports into a temporary project-local `.otalan/expo-export-*` folder, packages the exported JS bundle and assets, and stores the resolved Expo config in the Otalan manifest for publish. You do not need to create a `dist/` or `www/` folder before running it.
+`otalan bundle --target expo` runs `bunx expo export` itself, exports into a temporary project-local `.otalan/expo-export-*` folder, packages the exported JS bundle and assets, and stores the generated Otalan satellite manifest for publish. You do not need to create a `dist/` or `www/` folder before running it.
 `otalan publish` waits for server-side validation to finish before it returns.
 
 ## CI/CD Usage
@@ -222,7 +222,7 @@ Example project config:
 }
 ```
 
-`otalan.config.json` only links the repo to an Otalan project/app. Bundle and release targeting data such as `target`, `platform`, `nativeVersion`, and `bundleId` live in `.otalan/bundle/manifest.json`.
+`otalan.config.json` only links the repo to an Otalan project/app. Bundle and release targeting data such as `target`, `platform`, `nativeVersion`, `runtimeVersion`, and `bundleId` live in `.otalan/bundle/manifest.json`.
 
 ## Command Reference
 
@@ -335,7 +335,7 @@ Current behavior:
 - pass `--input-dir <path>` to package a different Capacitor web output folder
 - Expo runs `bunx expo export --platform <platform>` into a temporary project-local `.otalan/expo-export-*` folder
 - Expo does not require a prebuilt `dist/` or `www/` folder
-- Expo stores the resolved Expo app config in `.otalan/bundle/manifest.json` so publish can forward it for `extra.expoClient`
+- Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
 - `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
 
@@ -346,6 +346,7 @@ Native version defaults:
 - Capacitor Android reads `versionName` from `android/app/build.gradle` or `build.gradle.kts`
 - Expo reads the selected platform version from Expo config and falls back to the top-level Expo `version`
 - Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings; if none are present, the CLI falls back to the resolved native version
+- Expo publishes use `runtimeVersion` as the Otalan release `nativeVersion` because Expo update checks send `expo-runtime-version`
 - `--native-version` overrides auto-detection
 
 For Expo projects, the recommended app config is:
@@ -400,7 +401,7 @@ otalan bundle --target expo --platform ios --bundle-from-package
 
 Publishes the current bundle output with rollout metadata.
 
-`otalan publish` uses the `bundleId`, `platform`, and `nativeVersion` already stored in `.otalan/bundle/manifest.json`. To release `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
+`otalan publish` uses the `bundleId`, `platform`, and release version stored in `.otalan/bundle/manifest.json`. Capacitor uses `nativeVersion`; Expo uses `runtimeVersion`. To release `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
 
 Current behavior:
 
@@ -412,7 +413,8 @@ Current behavior:
 - `--rollout-percent` accepts an integer from `0` to `100`
 - `--optional` marks the update as non-mandatory
 - `--release-notes` attaches release notes to the published bundle
-- Expo publish forwards the stored Expo app config when present
+- Expo publish forwards the full generated Otalan satellite manifest when present
+- Expo publish sends `runtimeVersion` as the API `nativeVersion` and normalizes the serialized `expoManifest.nativeVersion` to the same value for server validation
 - Otalan validates the release ZIP before the publish completes
 
 Default flow:
@@ -433,13 +435,22 @@ Optional update:
 otalan publish --channel production --optional
 ```
 
-This uses `POST /v1/releases/create` and waits for `GET /v1/releases/ingests/:id` to reach `ready` before returning success.
+This uses the direct-upload release flow:
+
+1. `POST /v1/releases/create` with JSON metadata for the release and local ZIP, including `expoManifest` for Expo bundles
+2. `PUT` the ZIP bytes directly to the returned `uploadUrl` with the exact returned `Content-Type`
+3. `POST /v1/releases/ingests/:id/complete`
+4. poll `GET /v1/releases/ingests/:id` until the ingest reaches `ready` or `failed`
+
+The ZIP is opened as a disk-backed `Bun.file` and passed directly to the signed `PUT`; `otalan publish` does not load the full archive into memory first.
 
 If validation fails, `otalan publish` exits non-zero and prints the ingest failure reason when the API provides one. This makes the command safe to use directly in CI/CD pipelines.
 
 ### `otalan bundles`
 
 Lists remote bundles for the current app so you can choose a bundle for rollback or rollout operations.
+
+Remote bundle tables display the API `publishedAt` timestamp, not the bundle row `createdAt` timestamp.
 
 Default resolution order:
 
@@ -466,6 +477,8 @@ otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
 
 Shows the active bundle for the selected release tuple.
 
+The active bundle summary displays `publishedAt` as `Published at`.
+
 `status` also uses the same native-version default order as `bundles`.
 
 ```bash
@@ -487,7 +500,7 @@ otalan status --platform ios --channel production
 }
 ```
 
-### Expo Manifest
+### Expo Satellite Manifest
 
 ```json
 {
@@ -509,6 +522,8 @@ otalan status --platform ios --channel production
   "platform": "ios"
 }
 ```
+
+For Expo publishes, `otalan publish` serializes this file and sends it to `/v1/releases/create` as `expoManifest`.
 
 ## Maintainer Release Checklist
 

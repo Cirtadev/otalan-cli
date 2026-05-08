@@ -2,6 +2,16 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.2.0 - 2026-05-08
+
+### Changed
+
+- Switch `otalan publish` to the direct-upload release contract: create JSON upload metadata, upload the ZIP to the returned signed URL, complete the ingest, then poll validation.
+- Stream the local ZIP through Bun's disk-backed file body during signed uploads instead of loading the full archive into memory.
+- Send the full generated Otalan Expo satellite manifest as `expoManifest` during publish instead of only raw Expo config.
+- Use the Expo `runtimeVersion` as the release `nativeVersion` sent to the API, matching the current Expo update matching contract.
+- Use the release bundle `publishedAt` timestamp for bundle lists, status summaries, rollback prompts, and published bundle ID hints.
+
 ## 1.1.1 - 2026-05-07
 
 ### Changed

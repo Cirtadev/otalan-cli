@@ -36,7 +36,7 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
     fileSizeBytes: 1234,
     storageObjectExists: true,
     isActive: false,
-    createdAt: '2026-05-04T00:00:00.000Z',
+    publishedAt: '2026-05-04T00:00:00.000Z',
     resolvedDownloadUrl: 'https://cdn.example.com/ios.zip',
     ...overrides,
   }
@@ -338,12 +338,12 @@ describe('bundleCommandTestUtils.resolvePublishedBundleIdFromReleases', () => {
       createRelease({
         bundleId: '1.2.3-web.1',
         isActive: false,
-        createdAt: '2026-05-04T00:00:00.000Z',
+        publishedAt: '2026-05-04T00:00:00.000Z',
       }),
       createRelease({
         bundleId: '1.2.3-web.2',
         isActive: true,
-        createdAt: '2026-05-03T00:00:00.000Z',
+        publishedAt: '2026-05-03T00:00:00.000Z',
       }),
     ])).toBe('1.2.3-web.2')
   })
@@ -352,11 +352,11 @@ describe('bundleCommandTestUtils.resolvePublishedBundleIdFromReleases', () => {
     expect(bundleCommandTestUtils.resolvePublishedBundleIdFromReleases([
       createRelease({
         bundleId: '1.2.3-web.1',
-        createdAt: '2026-05-03T00:00:00.000Z',
+        publishedAt: '2026-05-03T00:00:00.000Z',
       }),
       createRelease({
         bundleId: '1.2.3-web.2',
-        createdAt: '2026-05-04T00:00:00.000Z',
+        publishedAt: '2026-05-04T00:00:00.000Z',
       }),
     ])).toBe('1.2.3-web.2')
   })

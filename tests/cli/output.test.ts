@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { formatReleaseContextSummary } from '../../src/cli/output'
+import { formatBundleSummary, formatReleaseContextSummary } from '../../src/cli/output'
 import type { ReleaseContext } from '../../src/http'
 
 // -----------------------------------------------------------------------------
@@ -39,5 +39,17 @@ describe('formatReleaseContextSummary', () => {
       'Organization: test-org',
       'Project: mobile-app',
     ].join('\n'))
+  })
+})
+
+describe('formatBundleSummary', () => {
+  test('prints the bundle publishedAt timestamp', () => {
+    expect(formatBundleSummary({
+      bundleId: '1.0.0-web.2',
+      platform: 'ios',
+      channel: 'production',
+      nativeVersion: '1.0.0',
+      publishedAt: '2026-04-22T00:00:00.000Z',
+    })).toContain('Published at: 2026-04-22T00:00:00.000Z')
   })
 })

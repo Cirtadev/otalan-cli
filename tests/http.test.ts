@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createRelease, getReleaseContext, getReleaseIngest, listReleaseApps, listReleases } from '../src/http'
+import {
+  completeReleaseUpload,
+  createReleaseUploadIntent,
+  getReleaseContext,
+  getReleaseIngest,
+  listReleaseApps,
+  listReleases,
+  uploadReleaseArchive,
+} from '../src/http'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -56,8 +64,8 @@ function mockQueuedIngestFetch(
   }) as typeof fetch
 }
 
-function createArchiveFile() {
-  return new File(['zip-bytes'], 'bundle.zip', {
+function createArchiveBlob() {
+  return new Blob(['zip-bytes'], {
     type: 'application/zip',
   })
 }
@@ -151,8 +159,8 @@ describe('getReleaseIngest', () => {
   })
 })
 
-describe('createRelease', () => {
-  test('posts rollout metadata to the create ingest endpoint', async () => {
+describe('createReleaseUploadIntent', () => {
+  test('posts JSON rollout metadata to the create ingest endpoint', async () => {
     let requestBody: unknown = null
 
     globalThis.fetch = (async (input, init) => {
@@ -160,8 +168,8 @@ describe('createRelease', () => {
       expect(init?.method).toBe('POST')
       expect(init?.headers).toEqual({
         'x-api-key': 'test-key',
+        'Content-Type': 'application/json',
       })
-      expect(init?.body).toBeInstanceOf(FormData)
       requestBody = init?.body
 
       return new Response(JSON.stringify({
@@ -171,6 +179,8 @@ describe('createRelease', () => {
           rolloutPercent: 25,
           releaseNotes: 'Fixes startup crash',
         }),
+        uploadUrl: 'https://upload.example.test/quarantine.zip',
+        contentType: 'application/zip',
       }), {
         status: 202,
         headers: {
@@ -179,7 +189,7 @@ describe('createRelease', () => {
       })
     }) as typeof fetch
 
-    const item = await createRelease({
+    const intent = await createReleaseUploadIntent({
       apiUrl: 'https://api.otalan.com',
       apiKey: 'test-key',
       appId: 'com.example.app',
@@ -190,25 +200,73 @@ describe('createRelease', () => {
       mandatory: false,
       rolloutPercent: 25,
       releaseNotes: 'Fixes startup crash',
-      file: createArchiveFile(),
-      expoConfig: {
-        scheme: 'example',
-      },
+      fileName: 'bundle.zip',
+      fileSizeBytes: 9,
+      contentType: 'application/zip',
+      expoManifest: '{"target":"expo","bundleId":"1.0.0-web.2","runtimeVersion":"1.0.0","launchAsset":"entry.hbc","assets":[],"expoConfig":{"scheme":"example"}}',
     })
 
-    expect(item.id).toBe('ingest-456')
-    expect(item.rolloutPercent).toBe(25)
-    expect(item.releaseNotes).toBe('Fixes startup crash')
-    if (!(requestBody instanceof FormData)) {
-      throw new Error('Expected form data request body')
-    }
+    expect(intent.item.id).toBe('ingest-456')
+    expect(intent.item.rolloutPercent).toBe(25)
+    expect(intent.item.releaseNotes).toBe('Fixes startup crash')
+    expect(intent.uploadUrl).toBe('https://upload.example.test/quarantine.zip')
+    expect(intent.contentType).toBe('application/zip')
+    expect(typeof requestBody).toBe('string')
+    expect(JSON.parse(requestBody as string)).toEqual({
+      appId: 'com.example.app',
+      platform: 'ios',
+      channel: 'production',
+      nativeVersion: '1.0.0',
+      bundleId: '1.0.0-web.2',
+      mandatory: false,
+      rolloutPercent: 25,
+      releaseNotes: 'Fixes startup crash',
+      fileName: 'bundle.zip',
+      fileSizeBytes: 9,
+      contentType: 'application/zip',
+      expoManifest: '{"target":"expo","bundleId":"1.0.0-web.2","runtimeVersion":"1.0.0","launchAsset":"entry.hbc","assets":[],"expoConfig":{"scheme":"example"}}',
+    })
+  })
+})
 
-    const formData: FormData = requestBody
+describe('uploadReleaseArchive', () => {
+  test('puts the archive body directly to the signed upload URL', async () => {
+    const archive = createArchiveBlob()
 
-    expect(formData.get('mandatory')).toBe('false')
-    expect(formData.get('rolloutPercent')).toBe('25')
-    expect(formData.get('releaseNotes')).toBe('Fixes startup crash')
-    expect(formData.get('expoConfig')).toBe('{"scheme":"example"}')
+    globalThis.fetch = (async (input, init) => {
+      expect(String(input)).toBe('https://upload.example.test/quarantine.zip')
+      expect(init?.method).toBe('PUT')
+      expect(init?.headers).toEqual({
+        'Content-Type': 'application/zip',
+      })
+      expect(init?.body).toBe(archive)
+      expect(await new Response(init?.body as BodyInit).text()).toBe('zip-bytes')
+
+      return new Response('', {
+        status: 200,
+      })
+    }) as typeof fetch
+
+    await uploadReleaseArchive({
+      uploadUrl: 'https://upload.example.test/quarantine.zip',
+      archive,
+      contentType: 'application/zip',
+    })
+  })
+})
+
+describe('completeReleaseUpload', () => {
+  test('marks the uploaded ingest complete without sending a ZIP body', async () => {
+    mockQueuedIngestFetch('/v1/releases/ingests/ingest-123/complete')
+
+    const item = await completeReleaseUpload({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      ingestId: 'ingest-123',
+    })
+
+    expect(item.id).toBe('ingest-123')
+    expect(item.status).toBe('pending')
   })
 })
 

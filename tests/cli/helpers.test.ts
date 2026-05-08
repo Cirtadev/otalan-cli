@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 import type { BundleManifest } from '../../src/bundle'
 import {
+  openBundleArchive,
   resolveApiKeysUrl,
   resolveManifestDefaultNativeVersion,
   resolveManifestNativeVersion,
@@ -19,6 +23,21 @@ const capacitorManifest: BundleManifest = {
   hash: 'abc123',
   nativeVersion: '1.0.0',
   bundleId: '1.0.0-abc123',
+  createdAt: '2026-04-10T00:00:00.000Z',
+  platform: 'ios',
+}
+
+const expoManifest: BundleManifest = {
+  target: 'expo',
+  hash: 'def456',
+  nativeVersion: '2.0.0',
+  runtimeVersion: '1.0.0',
+  bundleId: '1.0.0-def456',
+  launchAsset: '_expo/static/js/ios/entry.hbc',
+  assets: ['assets/icon.png'],
+  expoConfig: {
+    scheme: 'example',
+  },
   createdAt: '2026-04-10T00:00:00.000Z',
   platform: 'ios',
 }
@@ -74,9 +93,20 @@ describe('manifest tuple helpers', () => {
     expect(resolveManifestNativeVersion(capacitorManifest, '1.0.0')).toBe('1.0.0')
   })
 
+  test('uses the Expo runtimeVersion as the release nativeVersion', () => {
+    expect(resolveManifestNativeVersion(expoManifest, '1.0.0')).toBe('1.0.0')
+    expect(resolveManifestDefaultNativeVersion(expoManifest, 'ios')).toBe('1.0.0')
+  })
+
   test('throws when the manifest native version conflicts with the option', () => {
     expect(() => resolveManifestNativeVersion(capacitorManifest, '2.0.0')).toThrow(
       'Bundle manifest nativeVersion "1.0.0" does not match --native-version "2.0.0".',
+    )
+  })
+
+  test('throws when the Expo manifest runtimeVersion conflicts with the option', () => {
+    expect(() => resolveManifestNativeVersion(expoManifest, '2.0.0')).toThrow(
+      'Bundle manifest runtimeVersion "1.0.0" does not match --native-version "2.0.0".',
     )
   })
 
@@ -89,5 +119,24 @@ describe('manifest tuple helpers', () => {
 describe('resolveApiKeysUrl', () => {
   test('uses the public dashboard URL', () => {
     expect(resolveApiKeysUrl()).toBe('https://otalan.com/api-keys')
+  })
+})
+
+describe('openBundleArchive', () => {
+  test('returns a disk-backed archive body without wrapping bytes in File', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-archive-'))
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(path.join(outputDir, 'bundle.zip'), 'zip-bytes')
+
+    const archive = await openBundleArchive(outputDir)
+
+    expect(archive.fileName).toBe('bundle.zip')
+    expect(archive.fileSizeBytes).toBe(9)
+    expect(archive.contentType).toBe('application/zip')
+    expect(archive.body).toBeInstanceOf(Blob)
+    expect(archive.body).not.toBeInstanceOf(File)
+    expect(await archive.body.text()).toBe('zip-bytes')
   })
 })

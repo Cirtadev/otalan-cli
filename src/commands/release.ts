@@ -5,7 +5,7 @@ import { resolveProjectNativeVersion } from '../bundle'
 import { readBooleanOption, readStringOption } from '../cli/args'
 import {
   assertReleaseContextMatchesConfig,
-  readBundleFile,
+  openBundleArchive,
   readBundleManifest,
   readBundleManifestIfExists,
   resolveApiConfig,
@@ -28,10 +28,12 @@ import type { MobilePlatform } from '../config'
 import {
   type BundleIngestItem,
   type ReleaseItem,
-  createRelease,
+  completeReleaseUpload,
+  createReleaseUploadIntent,
   getReleaseIngest,
   listReleases,
   rollbackRelease,
+  uploadReleaseArchive,
 } from '../http'
 
 // -----------------------------------------------------------------------------
@@ -148,12 +150,15 @@ async function resolveReleaseTupleFromManifest(
   }
 }
 
-function resolveManifestExpoConfig(manifest: BundleManifest) {
+function resolveManifestExpoPublishMetadata(manifest: BundleManifest) {
   if (manifest.target !== 'expo') {
     return undefined
   }
 
-  return manifest.expoConfig
+  return JSON.stringify({
+    ...manifest,
+    nativeVersion: manifest.runtimeVersion,
+  })
 }
 
 function isTerminalIngestStatus(status: string) {
@@ -238,8 +243,8 @@ export async function handlePublish(
   const mandatory = !readBooleanOption(options, 'optional', false)
   const rolloutPercent = resolveRolloutPercent(options)
   const releaseNotes = readStringOption(options, 'release-notes')
-  const file = await readBundleFile(outputDir)
-  const ingest = await createRelease({
+  const archive = await openBundleArchive(outputDir)
+  const uploadIntent = await createReleaseUploadIntent({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
@@ -250,8 +255,22 @@ export async function handlePublish(
     mandatory,
     rolloutPercent,
     releaseNotes,
-    file,
-    expoConfig: resolveManifestExpoConfig(manifest),
+    fileName: archive.fileName,
+    fileSizeBytes: archive.fileSizeBytes,
+    contentType: archive.contentType,
+    expoManifest: resolveManifestExpoPublishMetadata(manifest),
+  })
+
+  await uploadReleaseArchive({
+    uploadUrl: uploadIntent.uploadUrl,
+    archive: archive.body,
+    contentType: uploadIntent.contentType,
+  })
+
+  const ingest = await completeReleaseUpload({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+    ingestId: uploadIntent.item.id,
   })
 
   console.log('')
@@ -361,7 +380,7 @@ export async function handleRollback(
     rolloutPercent: item.rolloutPercent,
     rolloutState: item.rolloutState,
     releaseNotes: item.releaseNotes,
-    createdAt: item.createdAt,
+    publishedAt: item.publishedAt,
     selectable: Boolean(item.resolvedDownloadUrl),
   }))
 }
@@ -408,7 +427,7 @@ export async function handleStatus(
     rolloutPercent: active.rolloutPercent,
     rolloutState: active.rolloutState,
     releaseNotes: active.releaseNotes,
-    createdAt: active.createdAt,
+    publishedAt: active.publishedAt,
     selectable: Boolean(active.resolvedDownloadUrl),
   }))
 }
