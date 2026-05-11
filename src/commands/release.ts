@@ -28,11 +28,14 @@ import type { MobilePlatform } from '../config'
 import {
   type BundleIngestItem,
   type ReleaseItem,
+  cancelReleaseUpload,
   completeReleaseUpload,
   createReleaseUploadIntent,
   getReleaseIngest,
   listReleases,
+  pauseRelease,
   rollbackRelease,
+  resumeRelease,
   uploadReleaseArchive,
 } from '../http'
 
@@ -150,6 +153,30 @@ async function resolveReleaseTupleFromManifest(
   }
 }
 
+async function resolveRemoteReleaseTuple(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+  channelHint: string,
+) {
+  const platformFallback = readStringOption(options, 'platform')
+    ? undefined
+    : await promptPlatformChoice()
+  const platform = resolvePlatform(options, platformFallback)
+  const nativeVersion = readStringOption(options, 'native-version')
+    ?? await resolveDefaultNativeVersion(context, options, platform)
+  const channel = readStringOption(options, 'channel') ?? await promptWithHint({
+    question: 'Channel',
+    fallback: 'production',
+    hint: channelHint,
+  })
+
+  return {
+    platform,
+    nativeVersion,
+    channel,
+  }
+}
+
 function resolveManifestExpoPublishMetadata(manifest: BundleManifest) {
   if (manifest.target !== 'expo') {
     return undefined
@@ -261,11 +288,21 @@ export async function handlePublish(
     expoManifest: resolveManifestExpoPublishMetadata(manifest),
   })
 
-  await uploadReleaseArchive({
-    uploadUrl: uploadIntent.uploadUrl,
-    archive: archive.body,
-    contentType: uploadIntent.contentType,
-  })
+  try {
+    await uploadReleaseArchive({
+      uploadUrl: uploadIntent.uploadUrl,
+      archive: archive.body,
+      contentType: uploadIntent.contentType,
+    })
+  } catch (error) {
+    await cancelReleaseUpload({
+      apiUrl: api.apiUrl,
+      apiKey: api.apiKey,
+      ingestId: uploadIntent.item.id,
+    }).catch(() => undefined)
+
+    throw error
+  }
 
   const ingest = await completeReleaseUpload({
     apiUrl: api.apiUrl,
@@ -324,17 +361,11 @@ export async function handleRollback(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const platformFallback = readStringOption(options, 'platform')
-    ? undefined
-    : await promptPlatformChoice()
-  const platform = resolvePlatform(options, platformFallback)
-  const nativeVersion = readStringOption(options, 'native-version')
-    ?? await resolveDefaultNativeVersion(context, options, platform)
-  const channel = readStringOption(options, 'channel') ?? await promptWithHint({
-    question: 'Channel',
-    fallback: 'production',
-    hint: 'Release channel for this rollback.',
-  })
+  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+    context,
+    options,
+    'Release channel for this rollback.',
+  )
 
   const releases = await listReleases({
     apiUrl: api.apiUrl,
@@ -385,22 +416,67 @@ export async function handleRollback(
   }))
 }
 
+async function handleRolloutStateChange(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+  action: 'pause' | 'resume',
+) {
+  const { api, project } = await resolveReleaseAccess(context, options)
+  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+    context,
+    options,
+    `Release channel to ${action}.`,
+  )
+  const updateRolloutState = action === 'pause' ? pauseRelease : resumeRelease
+  const item = await updateRolloutState({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+    appId: project.appId,
+    platform,
+    channel,
+    nativeVersion,
+  })
+
+  console.log('')
+  console.log(action === 'pause' ? 'Rollout paused.' : 'Rollout resumed.')
+  console.log('')
+  console.log(formatBundleSummary({
+    bundleId: item.bundleId,
+    platform: item.platform,
+    channel: item.channel,
+    nativeVersion: item.nativeVersion,
+    rolloutPercent: item.rolloutPercent,
+    rolloutState: item.rolloutState,
+    releaseNotes: item.releaseNotes,
+    publishedAt: item.publishedAt,
+    selectable: Boolean(item.resolvedDownloadUrl),
+  }))
+}
+
+export async function handlePause(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  await handleRolloutStateChange(context, options, 'pause')
+}
+
+export async function handleResume(
+  context: CommandContext,
+  options: Record<string, string | boolean>,
+) {
+  await handleRolloutStateChange(context, options, 'resume')
+}
+
 export async function handleStatus(
   context: CommandContext,
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const platformFallback = readStringOption(options, 'platform')
-    ? undefined
-    : await promptPlatformChoice()
-  const platform = resolvePlatform(options, platformFallback)
-  const nativeVersion = readStringOption(options, 'native-version')
-    ?? await resolveDefaultNativeVersion(context, options, platform)
-  const channel = readStringOption(options, 'channel') ?? await promptWithHint({
-    question: 'Channel',
-    fallback: 'production',
-    hint: 'Release channel.',
-  })
+  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+    context,
+    options,
+    'Release channel.',
+  )
 
   const releases = await listReleases({
     apiUrl: api.apiUrl,
@@ -437,17 +513,11 @@ export async function handleBundlesList(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const platformFallback = readStringOption(options, 'platform')
-    ? undefined
-    : await promptPlatformChoice()
-  const platform = resolvePlatform(options, platformFallback)
-  const channel = readStringOption(options, 'channel') ?? await promptWithHint({
-    question: 'Channel',
-    fallback: 'production',
-    hint: 'Release channel.',
-  })
-  const nativeVersion = readStringOption(options, 'native-version')
-    ?? await resolveDefaultNativeVersion(context, options, platform)
+  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+    context,
+    options,
+    'Release channel.',
+  )
 
   const releases = await listReleases({
     apiUrl: api.apiUrl,

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import type { BundleIngestItem, ReleaseItem } from '../../src/http'
-import { handlePublish, handleStatus, releaseTestUtils } from '../../src/commands/release'
+import { handlePause, handlePublish, handleResume, handleStatus, releaseTestUtils } from '../../src/commands/release'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -30,6 +30,7 @@ function createIngest(overrides: Partial<BundleIngestItem> = {}): BundleIngestIt
     channel: 'production',
     nativeVersion: '1.0.0',
     bundleId: '1.0.0-web.2',
+    releaseStorageId: 'release-storage-123',
     status: 'pending',
     failureReason: null,
     checksum: null,
@@ -52,8 +53,7 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
     channel: 'production',
     nativeVersion: '1.0.0',
     bundleId: '1.0.0-web.1',
-    storageKey: 'bundles/ios.zip',
-    downloadUrl: 'https://cdn.example.com/ios.zip',
+    releaseStorageId: 'release-storage-123',
     checksum: 'abc123',
     mandatory: true,
     rolloutPercent: 100,
@@ -157,6 +157,24 @@ async function createProjectFixture() {
   return cwd
 }
 
+function createReleaseContextResponse() {
+  return new Response(JSON.stringify({
+    item: {
+      organizationId: 'org-123',
+      organizationName: 'Test Organization',
+      organizationSlug: 'test-org',
+      projectId: 'project-123',
+      projectName: 'Mobile App',
+      projectSlug: 'mobile-app',
+    },
+  }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+}
+
 describe('release command context output', () => {
   test('prints organization and project before running a release command', async () => {
     const cwd = await createProjectFixture()
@@ -227,6 +245,168 @@ describe('release command context output', () => {
     expect(requestedPaths[0]).toBe('/v1/releases/context')
     expect(output).toContain('Organization: Test Organization (test-org)')
     expect(output).toContain('Project: Mobile App (mobile-app)')
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Rollout state commands
+// -----------------------------------------------------------------------------
+
+describe('handlePause', () => {
+  test('pauses the active rollout for the selected tuple', async () => {
+    const cwd = await createProjectFixture()
+    const output: string[] = []
+    const requestedPaths: string[] = []
+
+    console.log = (...args: unknown[]) => {
+      output.push(args.map(String).join(' '))
+    }
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      requestedPaths.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+
+      if (url.pathname === '/v1/releases/context') {
+        return createReleaseContextResponse()
+      }
+
+      if (url.pathname === '/v1/releases/pause') {
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+          'Content-Type': 'application/json',
+        })
+        expect(JSON.parse(init?.body as string)).toEqual({
+          appId: 'com.example.app',
+          platform: 'ios',
+          channel: 'production',
+          nativeVersion: '1.0.0',
+        })
+
+        return new Response(JSON.stringify({
+          item: createRelease({
+            isActive: true,
+            rolloutState: 'paused',
+          }),
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await handlePause({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'native-version': '1.0.0',
+    })
+
+    expect(requestedPaths).toEqual([
+      'GET /v1/releases/context',
+      'POST /v1/releases/pause',
+    ])
+    expect(output).toContain('Rollout paused.')
+    expect(output.join('\n')).toContain('State: paused')
+  })
+
+  test('surfaces the API error when no active bundle exists', async () => {
+    const cwd = await createProjectFixture()
+
+    console.log = () => {}
+
+    globalThis.fetch = (async (input) => {
+      const url = new URL(String(input))
+
+      if (url.pathname === '/v1/releases/context') {
+        return createReleaseContextResponse()
+      }
+
+      if (url.pathname === '/v1/releases/pause') {
+        return new Response(JSON.stringify({
+          message: 'No active bundle found for the selected release tuple',
+        }), {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await expect(handlePause({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'native-version': '1.0.0',
+    })).rejects.toThrow('No active bundle found for the selected release tuple')
+  })
+})
+
+describe('handleResume', () => {
+  test('resumes the active rollout for the selected tuple', async () => {
+    const cwd = await createProjectFixture()
+    const output: string[] = []
+    const requestedPaths: string[] = []
+
+    console.log = (...args: unknown[]) => {
+      output.push(args.map(String).join(' '))
+    }
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      requestedPaths.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+
+      if (url.pathname === '/v1/releases/context') {
+        return createReleaseContextResponse()
+      }
+
+      if (url.pathname === '/v1/releases/resume') {
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+          'Content-Type': 'application/json',
+        })
+        expect(JSON.parse(init?.body as string)).toEqual({
+          appId: 'com.example.app',
+          platform: 'ios',
+          channel: 'production',
+          nativeVersion: '1.0.0',
+        })
+
+        return new Response(JSON.stringify({
+          item: createRelease({
+            isActive: true,
+            rolloutState: 'active',
+          }),
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await handleResume({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'native-version': '1.0.0',
+    })
+
+    expect(requestedPaths).toEqual([
+      'GET /v1/releases/context',
+      'POST /v1/releases/resume',
+    ])
+    expect(output).toContain('Rollout resumed.')
+    expect(output.join('\n')).toContain('State: active')
   })
 })
 
@@ -401,6 +581,107 @@ describe('handlePublish', () => {
       'PUT https://upload.example.test/quarantine.zip',
       'POST https://api.otalan.com/v1/releases/ingests/ingest-123/complete',
       'GET https://api.otalan.com/v1/releases/ingests/ingest-123',
+    ])
+  })
+
+  test('cancels the upload intent when direct object storage upload fails', async () => {
+    const cwd = await createProjectFixture()
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+    const manifest = {
+      target: 'capacitor',
+      hash: '0'.repeat(64),
+      nativeVersion: '1.0.0',
+      bundleId: '1.0.0-web.3',
+      createdAt: '2026-04-21T00:00:00.000Z',
+      platform: 'ios',
+    }
+    const events: string[] = []
+
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(path.join(outputDir, 'bundle.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+
+    console.log = () => {}
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      events.push(`${init?.method ?? 'GET'} ${url.href}`)
+
+      if (url.pathname === '/v1/releases/context') {
+        return new Response(JSON.stringify({
+          item: {
+            organizationId: 'org-123',
+            organizationName: 'Test Organization',
+            organizationSlug: 'test-org',
+            projectId: 'project-123',
+            projectName: 'Mobile App',
+            projectSlug: 'mobile-app',
+          },
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.pathname === '/v1/releases/create') {
+        return new Response(JSON.stringify({
+          item: createIngest({
+            bundleId: '1.0.0-web.3',
+            status: 'uploading',
+          }),
+          uploadUrl: 'https://upload.example.test/quarantine.zip',
+          contentType: 'application/zip',
+        }), {
+          status: 202,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.href === 'https://upload.example.test/quarantine.zip') {
+        return new Response('<Error>Access Denied</Error>', {
+          status: 403,
+        })
+      }
+
+      if (url.pathname === '/v1/releases/ingests/ingest-123/cancel') {
+        expect(init?.method).toBe('POST')
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+        })
+        expect(init?.body).toBeUndefined()
+
+        return new Response(JSON.stringify({
+          item: createIngest({
+            bundleId: '1.0.0-web.3',
+            status: 'failed',
+            failureReason: 'Upload cancelled before completion',
+          }),
+        }), {
+          status: 202,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.href}`)
+    }) as typeof fetch
+
+    await expect(handlePublish({ cwd }, {
+      'api-key': 'test-key',
+      'api-url': 'https://api.otalan.com',
+      channel: 'production',
+    })).rejects.toThrow('Direct bundle upload failed with status 403')
+
+    expect(events).toEqual([
+      'GET https://api.otalan.com/v1/releases/context',
+      'POST https://api.otalan.com/v1/releases/create',
+      'PUT https://upload.example.test/quarantine.zip',
+      'POST https://api.otalan.com/v1/releases/ingests/ingest-123/cancel',
     ])
   })
 })

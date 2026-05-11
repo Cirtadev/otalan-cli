@@ -57,6 +57,10 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['', '[--channel production] [--native-version 1.0.0]', ''],
     ['rollback', '--bundle-id ... [--platform ios|android]', 'Reactivate a published bundle.'],
     ['', '[--channel production] [--native-version 1.0.0]', ''],
+    ['pause', '[--platform ios|android] [--channel production]', 'Pause the active bundle rollout.'],
+    ['', '[--native-version 1.0.0]', ''],
+    ['resume', '[--platform ios|android] [--channel production]', 'Resume the active bundle rollout.'],
+    ['', '[--native-version 1.0.0]', ''],
     ['status', '[--platform ios|android] [--channel production]', 'Show the active bundle for a release tuple.'],
     ['', '[--native-version 1.0.0]', ''],
   ] as const

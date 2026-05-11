@@ -53,6 +53,17 @@ type BundleResult = {
   outputDir: string
   manifest: BundleManifest
   bundleIdSource: BundleIdSource
+  omittedSourceMapCount: number
+}
+
+type CollectDirectoryEntriesOptions = {
+  shouldOmitFile?: (relativePath: string) => boolean
+  omittedPaths?: string[]
+}
+
+type ZipDirectoryResult = {
+  bytes: Uint8Array
+  omittedSourceMapCount: number
 }
 
 // -----------------------------------------------------------------------------
@@ -80,7 +91,11 @@ async function pathIsDirectory(directoryPath: string) {
   }
 }
 
-async function collectDirectoryEntries(rootDir: string, currentDir = rootDir) {
+async function collectDirectoryEntries(
+  rootDir: string,
+  currentDir = rootDir,
+  options: CollectDirectoryEntriesOptions = {},
+) {
   const entries: Record<string, Uint8Array> = {}
   const items = (await readdir(currentDir, { withFileTypes: true }))
     .sort((left, right) => {
@@ -99,7 +114,7 @@ async function collectDirectoryEntries(rootDir: string, currentDir = rootDir) {
     const absolutePath = path.join(currentDir, item.name)
 
     if (item.isDirectory()) {
-      const nestedEntries = await collectDirectoryEntries(rootDir, absolutePath)
+      const nestedEntries = await collectDirectoryEntries(rootDir, absolutePath, options)
 
       Object.assign(entries, nestedEntries)
       continue
@@ -114,20 +129,46 @@ async function collectDirectoryEntries(rootDir: string, currentDir = rootDir) {
       .split(path.sep)
       .join(path.posix.sep)
 
+    if (options.shouldOmitFile?.(relativePath)) {
+      options.omittedPaths?.push(relativePath)
+      continue
+    }
+
     entries[relativePath] = new Uint8Array(await Bun.file(absolutePath).arrayBuffer())
   }
 
   return entries
 }
 
-async function zipDirectory(directoryPath: string) {
-  const entries = await collectDirectoryEntries(directoryPath)
+function isSourceMapPath(relativePath: string) {
+  return relativePath.endsWith('.map')
+}
+
+export function formatOmittedSourceMapCount(count: number) {
+  return count === 1
+    ? 'Omitted 1 source map file from bundle ZIP.'
+    : `Omitted ${count} source map files from bundle ZIP.`
+}
+
+async function zipDirectory(directoryPath: string): Promise<ZipDirectoryResult> {
+  const omittedSourceMapPaths: string[] = []
+  const entries = await collectDirectoryEntries(directoryPath, directoryPath, {
+    shouldOmitFile: isSourceMapPath,
+    omittedPaths: omittedSourceMapPaths,
+  })
 
   if (Object.keys(entries).length === 0) {
+    if (omittedSourceMapPaths.length > 0) {
+      throw new Error(`No bundle files found in ${directoryPath} after omitting ${omittedSourceMapPaths.length} source map file(s).`)
+    }
+
     throw new Error(`No files found in ${directoryPath}`)
   }
 
-  return zipSync(entries, { level: 9 })
+  return {
+    bytes: zipSync(entries, { level: 9 }),
+    omittedSourceMapCount: omittedSourceMapPaths.length,
+  }
 }
 
 async function writeBundleOutput(outputDir: string, bundleBytes: Uint8Array, manifest: BundleManifest) {
@@ -674,6 +715,8 @@ export const bundleTestUtils = {
   findRuntimeVersionInObject,
   collectDirectoryEntries,
   createExpoExportDirectory,
+  formatOmittedSourceMapCount,
+  zipDirectory,
 }
 
 // -----------------------------------------------------------------------------
@@ -697,8 +740,8 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
     throw new Error('Unable to find a Capacitor web directory. Build your app first, then run `otalan bundle`. Checked dist/ and www/.')
   }
 
-  const bundleBytes = await zipDirectory(inputDirectory)
-  const hash = hashBytes(bundleBytes)
+  const bundleArchive = await zipDirectory(inputDirectory)
+  const hash = hashBytes(bundleArchive.bytes)
   const nativeVersion = await resolveCapacitorNativeVersion(
     options.cwd,
     options.platform,
@@ -722,12 +765,13 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
     platform: options.platform,
   }
 
-  await writeBundleOutput(options.outputDir, bundleBytes, manifest)
+  await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
 
   return {
     outputDir: options.outputDir,
     manifest,
     bundleIdSource,
+    omittedSourceMapCount: bundleArchive.omittedSourceMapCount,
   }
 }
 
@@ -751,8 +795,8 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       exportedRuntimeVersion,
       nativeVersion,
     )
-    const bundleBytes = await zipDirectory(exportDir)
-    const hash = hashBytes(bundleBytes)
+    const bundleArchive = await zipDirectory(exportDir)
+    const hash = hashBytes(bundleArchive.bytes)
     const assets = await buildExpoAssetManifest(exportDir)
     const packageVersion = await readPackageVersion(options.cwd)
     const { bundleId, bundleIdSource } = resolveBundleId({
@@ -777,12 +821,13 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       platform: options.platform,
     }
 
-    await writeBundleOutput(options.outputDir, bundleBytes, manifest)
+    await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
 
     return {
       outputDir: options.outputDir,
       manifest,
       bundleIdSource,
+      omittedSourceMapCount: bundleArchive.omittedSourceMapCount,
     }
   } finally {
     await rm(exportDir, { recursive: true, force: true })

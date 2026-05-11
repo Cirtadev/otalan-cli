@@ -6,7 +6,14 @@ import { printHelp } from './cli/output'
 import { handleDoctor, handleInit, handleLogin } from './commands/auth'
 import { handleBundle } from './commands/bundle'
 import { handleKeygen } from './commands/keygen'
-import { handleBundlesList, handlePublish, handleRollback, handleStatus } from './commands/release'
+import {
+  handleBundlesList,
+  handlePause,
+  handlePublish,
+  handleResume,
+  handleRollback,
+  handleStatus,
+} from './commands/release'
 
 // -----------------------------------------------------------------------------
 // Entrypoint
@@ -59,6 +66,12 @@ async function main() {
       return
     case 'rollback':
       await handleRollback(context, parsed.options)
+      return
+    case 'pause':
+      await handlePause(context, parsed.options)
+      return
+    case 'resume':
+      await handleResume(context, parsed.options)
       return
     case 'help':
       printHelp(await readCliVersion())

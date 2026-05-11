@@ -12,8 +12,7 @@ export type ReleaseItem = {
   channel: string
   nativeVersion: string
   bundleId: string
-  storageKey: string | null
-  downloadUrl: string | null
+  releaseStorageId: string
   checksum: string | null
   mandatory: boolean
   rolloutPercent: number
@@ -49,6 +48,7 @@ export type BundleIngestItem = {
   channel: string
   nativeVersion: string
   bundleId: string
+  releaseStorageId: string
   status: string
   failureReason: string | null
   checksum: string | null
@@ -72,6 +72,8 @@ type ReleaseIdentity = {
   nativeVersion: string
   bundleId: string
 }
+
+type ReleaseTuple = Omit<ReleaseIdentity, 'bundleId'>
 
 type ReleasePublishMetadata = {
   mandatory: boolean
@@ -230,6 +232,21 @@ export async function completeReleaseUpload(input: ReleaseClientConfig & {
   return payload.item
 }
 
+export async function cancelReleaseUpload(input: ReleaseClientConfig & {
+  ingestId: string
+}) {
+  const payload = await requestJson<{
+    item: BundleIngestItem
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: `/v1/releases/ingests/${encodeURIComponent(input.ingestId)}/cancel`,
+    method: 'POST',
+  })
+
+  return payload.item
+}
+
 export async function getReleaseContext(input: ReleaseClientConfig) {
   const payload = await requestJson<{
     item: ReleaseContext
@@ -292,6 +309,41 @@ export async function rollbackRelease(input: ReleaseClientConfig & {
   })
 
   return payload.item
+}
+
+async function updateReleaseRolloutState(input: ReleaseClientConfig & ReleaseTuple & {
+  action: 'pause' | 'resume'
+}) {
+  const payload = await requestJson<{
+    item: ReleaseItem
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: `/v1/releases/${input.action}`,
+    method: 'POST',
+    body: {
+      appId: input.appId,
+      platform: input.platform,
+      channel: input.channel,
+      nativeVersion: input.nativeVersion,
+    },
+  })
+
+  return payload.item
+}
+
+export async function pauseRelease(input: ReleaseClientConfig & ReleaseTuple) {
+  return updateReleaseRolloutState({
+    ...input,
+    action: 'pause',
+  })
+}
+
+export async function resumeRelease(input: ReleaseClientConfig & ReleaseTuple) {
+  return updateReleaseRolloutState({
+    ...input,
+    action: 'resume',
+  })
 }
 
 export async function listReleases(input: ReleaseClientConfig & {

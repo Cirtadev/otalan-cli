@@ -337,6 +337,7 @@ Current behavior:
 - Expo does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
+- source map files (`*.map`) are omitted from bundle ZIPs by default; the CLI prints the omitted file count when any are skipped
 - `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
 
 Native version defaults:
@@ -416,6 +417,7 @@ Current behavior:
 - Expo publish forwards the full generated Otalan satellite manifest when present
 - Expo publish sends `runtimeVersion` as the API `nativeVersion` and normalizes the serialized `expoManifest.nativeVersion` to the same value for server validation
 - Otalan validates the release ZIP before the publish completes
+- active rollouts can be paused and resumed later without changing the selected bundle
 
 Default flow:
 
@@ -438,11 +440,13 @@ otalan publish --channel production --optional
 This uses the direct-upload release flow:
 
 1. `POST /v1/releases/create` with JSON metadata for the release and local ZIP, including `expoManifest` for Expo bundles
-2. `PUT` the ZIP bytes directly to the returned `uploadUrl` with the exact returned `Content-Type`
+2. `PUT` the ZIP bytes directly to the returned opaque `uploadUrl` with the exact returned `Content-Type`
 3. `POST /v1/releases/ingests/:id/complete`
 4. poll `GET /v1/releases/ingests/:id` until the ingest reaches `ready` or `failed`
 
-The ZIP is opened as a disk-backed `Bun.file` and passed directly to the signed `PUT`; `otalan publish` does not load the full archive into memory first.
+If the direct object-storage upload fails before completion, the CLI calls `POST /v1/releases/ingests/:id/cancel` so the reserved ingest does not block a retry.
+
+The ZIP is opened as a disk-backed `Bun.file` and passed directly to the returned `PUT` upload URL; `otalan publish` does not load the full archive into memory first.
 
 If validation fails, `otalan publish` exits non-zero and prints the ingest failure reason when the API provides one. This makes the command safe to use directly in CI/CD pipelines.
 
@@ -471,6 +475,26 @@ Reactivates an older bundle for the same tuple.
 
 ```bash
 otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
+```
+
+### `otalan pause`
+
+Pauses delivery of the currently active bundle for the selected release tuple.
+
+`pause` uses the same native-version default order as `bundles`. The active bundle remains selected, but new OTA checks stop receiving it until you resume the rollout.
+
+```bash
+otalan pause --platform ios --channel production
+```
+
+### `otalan resume`
+
+Resumes delivery of the currently active bundle for the selected release tuple.
+
+`resume` uses the same native-version default order as `bundles`.
+
+```bash
+otalan resume --platform ios --channel production
 ```
 
 ### `otalan status`

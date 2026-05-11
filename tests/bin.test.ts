@@ -42,7 +42,7 @@ async function readPackageVersion() {
 }
 
 describe('CLI help', () => {
-  test('help reflects the publish-only release workflow', async () => {
+  test('help reflects the release workflow', async () => {
     const result = await runCli(['help'])
     const version = await readPackageVersion()
 
@@ -55,6 +55,8 @@ describe('CLI help', () => {
     expect(result.stdout).toContain('keygen')
     expect(result.stdout).toContain('Generate an Otalan key locally without calling the API.')
     expect(result.stdout).toContain('Publish the current bundle ZIP with rollout metadata.')
+    expect(result.stdout).toContain('Pause the active bundle rollout.')
+    expect(result.stdout).toContain('Resume the active bundle rollout.')
     expect(result.stdout).toContain('Release commands require the configured app to be active, not archived.')
     expect(result.stdout).not.toContain('upload')
     expect(result.stdout).not.toContain('--storage-key')

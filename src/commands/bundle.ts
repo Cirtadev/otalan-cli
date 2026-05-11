@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { stdin, stdout } from 'node:process'
 
-import { bundleProject, resolveProjectNativeVersion } from '../bundle'
+import { bundleProject, formatOmittedSourceMapCount, resolveProjectNativeVersion } from '../bundle'
 import { readBooleanOption, readStringOption } from '../cli/args'
 import {
   assertReleaseContextMatchesConfig,
@@ -336,6 +336,10 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     platform,
     target,
   })
+
+  if (result.omittedSourceMapCount > 0) {
+    console.log(formatOmittedSourceMapCount(result.omittedSourceMapCount))
+  }
 
   console.log(formatBundleIdSource(result.bundleIdSource))
   console.log('')
