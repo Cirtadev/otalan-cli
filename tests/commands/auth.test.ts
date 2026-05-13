@@ -66,6 +66,53 @@ describe('handleDoctor', () => {
 })
 
 describe('authCommandTestUtils', () => {
+  test('uses the default API URL without prompting when an API key is provided', async () => {
+    const prompts: string[] = []
+
+    const input = await authCommandTestUtils.resolveLoginInput(
+      {
+        'api-key': 'test-key',
+      },
+      async prompt => {
+        prompts.push(prompt.question)
+        return 'https://prompted.example.com'
+      },
+      async () => {
+        throw new Error('No stored config.')
+      },
+    )
+
+    expect(input).toEqual({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+    })
+    expect(prompts).toEqual([])
+  })
+
+  test('uses the stored API URL without prompting when only the API key is provided', async () => {
+    const prompts: string[] = []
+
+    const input = await authCommandTestUtils.resolveLoginInput(
+      {
+        'api-key': 'test-key',
+      },
+      async prompt => {
+        prompts.push(prompt.question)
+        return 'https://prompted.example.com'
+      },
+      async () => ({
+        apiUrl: 'https://staging.example.com',
+        apiKey: 'stored-key',
+      }),
+    )
+
+    expect(input).toEqual({
+      apiUrl: 'https://staging.example.com',
+      apiKey: 'test-key',
+    })
+    expect(prompts).toEqual([])
+  })
+
   test('masks stored CI keys without exposing the full value', () => {
     expect(authCommandTestUtils.maskApiKey('otalan_ci_1234567890abcdef')).toBe('otalan_ci_...cdef')
   })

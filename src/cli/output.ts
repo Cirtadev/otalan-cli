@@ -66,9 +66,6 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
   ] as const
   const notes = [
     'Official app support: Capacitor 7/8 and Expo SDK 54/55.',
-    'Capacitor packages prebuilt web assets from dist/ or www/ by default; use --input-dir for another folder.',
-    'Expo runs `bunx expo export` into .otalan/expo-export-*; no dist/ or www/ build is required first.',
-    'Expo runtimeVersion comes from --runtime-version, Expo config/export metadata, or the native version fallback.',
     'Run `otalan login` to authenticate to a project; `otalan init` selects an active app in that project.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
     'Release commands require the configured app to be active, not archived.',

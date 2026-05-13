@@ -2,6 +2,7 @@ import {
   loadGlobalConfig,
   saveGlobalConfig,
   saveProjectConfig,
+  type GlobalConfig,
   type ProjectConfig,
 } from '../config'
 import { readStringOption } from '../cli/args'
@@ -18,6 +19,7 @@ import { promptSelectWithHint, promptWithHint, type PromptWithHintInput } from '
 // -----------------------------------------------------------------------------
 
 type TextPrompt = (input: PromptWithHintInput) => Promise<string>
+type GlobalConfigLoader = () => Promise<GlobalConfig>
 
 function maskApiKey(apiKey: string) {
   const trimmed = apiKey.trim()
@@ -29,21 +31,28 @@ function maskApiKey(apiKey: string) {
   return `${trimmed.slice(0, 10)}...${trimmed.slice(-4)}`
 }
 
-async function resolveLoginInput(options: Record<string, string | boolean>, prompt: TextPrompt = promptWithHint) {
-  const stored = await loadGlobalConfig().catch(() => null)
-  const apiUrl = readStringOption(options, 'api-url') ?? await prompt({
-    question: 'Otalan API URL',
-    fallback: stored?.apiUrl ?? 'https://api.otalan.com',
-    hint: 'API base URL. Press Enter to keep the current value.',
-  })
+async function resolveLoginInput(
+  options: Record<string, string | boolean>,
+  prompt: TextPrompt = promptWithHint,
+  loadConfig: GlobalConfigLoader = loadGlobalConfig,
+) {
+  const stored = await loadConfig().catch(() => null)
+  const explicitApiUrl = readStringOption(options, 'api-url')
   const explicitApiKey = readStringOption(options, 'api-key')
+  const fallbackApiUrl = stored?.apiUrl ?? 'https://api.otalan.com'
 
   if (explicitApiKey) {
     return {
-      apiUrl,
+      apiUrl: explicitApiUrl ?? fallbackApiUrl,
       apiKey: explicitApiKey,
     }
   }
+
+  const apiUrl = explicitApiUrl ?? await prompt({
+    question: 'Otalan API URL',
+    fallback: fallbackApiUrl,
+    hint: 'API base URL. Press Enter to keep the current value.',
+  })
 
   const apiKeysUrl = resolveApiKeysUrl()
 
@@ -178,4 +187,5 @@ export const authCommandTestUtils = {
   formatAppOption,
   maskApiKey,
   resolveInitAppId,
+  resolveLoginInput,
 }

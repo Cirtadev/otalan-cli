@@ -2,6 +2,13 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.2.2 - 2026-05-13
+
+### Changed
+
+- Let `otalan login --api-key ...` use the saved or default API URL without prompting when `--api-url` is omitted.
+- Remove verbose Capacitor and Expo implementation notes from the default help footer.
+
 ## 1.2.1 - 2026-05-11
 
 ### Changed
