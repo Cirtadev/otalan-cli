@@ -218,6 +218,7 @@ Example project config:
 {
   "organizationSlug": "example-organization",
   "projectSlug": "example-project",
+  "appName": "Example App",
   "appId": "com.example.app"
 }
 ```
@@ -297,7 +298,7 @@ Creates `otalan.config.json` in the current project.
 
 Run `otalan init` once per app repo or working folder. If you switch to another checkout, folder, or app project, run `otalan init` there too so that folder has its own `otalan.config.json`.
 
-If you pass `--app-id`, the CLI validates that the app exists in the logged-in project before writing `otalan.config.json`. The CLI also stores `organizationSlug` and `projectSlug` from the CI key as a safety check.
+If you pass `--app-id`, the CLI validates that the app exists in the logged-in project before writing `otalan.config.json`. The CLI also stores `organizationSlug`, `projectSlug`, and the selected app name as a safety check and display context.
 
 ```bash
 otalan init
@@ -339,6 +340,7 @@ Current behavior:
 - both outputs produce a ZIP plus `manifest.json`
 - source map files (`*.map`) are omitted from bundle ZIPs by default; the CLI prints the omitted file count when any are skipped
 - native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
+- when `otalan.config.json` is available, the CLI prints the linked project and app before packaging
 - when `otalan login` and `otalan init` are configured, the CLI checks that the selected `bundleId` is not already published for the selected platform, runtimeVersion, and channel before writing bundle output
 - `--platform` is required so the CLI exports the selected platform and resolves the correct runtime version
 
@@ -574,5 +576,5 @@ bun pm pack --dry-run
 - Expo bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
 - Publishing, rollback, status, and `bundles` expect a CI key and an active app.
-- Release commands print the organization and project resolved from the CI key before continuing.
+- Bundle and release commands print the linked project and app before continuing when project config is available.
 - Run `bun run build` after changing CLI source if you want `dist/bin.js` updated locally.

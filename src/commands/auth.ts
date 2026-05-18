@@ -168,16 +168,18 @@ export async function handleInit(context: CommandContext, options: Record<string
     }),
   ])
   const appId = await resolveInitAppId({ apps, options })
+  const app = findAppByAppId(apps, appId)
 
   await saveProjectConfig(context.cwd, {
     organizationSlug: releaseContext.organizationSlug,
     projectSlug: releaseContext.projectSlug,
+    appName: app?.name,
     appId,
   } satisfies ProjectConfig)
 
   console.log('')
   console.log(`Resolved CI key context: ${releaseContext.organizationSlug} / ${releaseContext.projectSlug}`)
-  console.log(`Linked app: ${appId}`)
+  console.log(`Linked app: ${app ? formatAppOption(app) : appId}`)
 
   console.log('Created otalan.config.json.')
 }

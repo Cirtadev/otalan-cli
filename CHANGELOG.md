@@ -2,6 +2,17 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.3.2 - 2026-05-18
+
+### Added
+
+- Print the linked project and app before `otalan bundle` packages output.
+- Store the selected app name in `otalan.config.json` during `otalan init`.
+
+### Changed
+
+- Include the linked app in release command context output.
+
 ## 1.3.1 - 2026-05-18
 
 ### Added

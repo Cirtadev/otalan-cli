@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { formatBundleSummary, formatReleaseContextSummary } from '../../src/cli/output'
+import { formatBundleSummary, formatProjectConfigSummary, formatReleaseContextSummary } from '../../src/cli/output'
 import type { ReleaseContext } from '../../src/http'
 
 // -----------------------------------------------------------------------------
@@ -38,6 +38,32 @@ describe('formatReleaseContextSummary', () => {
     }))).toBe([
       'Organization: test-org',
       'Project: mobile-app',
+    ].join('\n'))
+  })
+
+  test('includes the selected app when provided', () => {
+    expect(formatReleaseContextSummary(createReleaseContext(), {
+      name: 'Customer Portal',
+      appId: 'com.example.app',
+    })).toBe([
+      'Organization: Test Organization (test-org)',
+      'Project: Mobile App (mobile-app)',
+      'App: Customer Portal (com.example.app)',
+    ].join('\n'))
+  })
+})
+
+describe('formatProjectConfigSummary', () => {
+  test('prints the locally linked project and app', () => {
+    expect(formatProjectConfigSummary({
+      organizationSlug: 'test-org',
+      projectSlug: 'mobile-app',
+      appName: 'Customer Portal',
+      appId: 'com.example.app',
+    })).toBe([
+      'Organization: test-org',
+      'Project: mobile-app',
+      'App: Customer Portal (com.example.app)',
     ].join('\n'))
   })
 })

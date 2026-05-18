@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
-import { authCommandTestUtils, handleDoctor } from '../../src/commands/auth'
+import { authCommandTestUtils, handleDoctor, handleInit } from '../../src/commands/auth'
 
 // -----------------------------------------------------------------------------
 // Test setup
@@ -62,6 +65,77 @@ describe('handleDoctor', () => {
       'Project: test-project',
     ])
     expect(events.join('\n')).not.toContain('test-key')
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Init command
+// -----------------------------------------------------------------------------
+
+describe('handleInit', () => {
+  test('stores the selected app name in the project config', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-init-'))
+
+    try {
+      globalThis.fetch = (async (input, init) => {
+        const url = new URL(String(input))
+
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+        })
+
+        if (url.pathname === '/v1/releases/context') {
+          return new Response(JSON.stringify({
+            item: {
+              organizationId: 'org-123',
+              organizationName: 'Test Org',
+              organizationSlug: 'test-org',
+              projectId: 'project-123',
+              projectName: 'Test Project',
+              projectSlug: 'test-project',
+            },
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+        }
+
+        if (url.pathname === '/v1/releases/apps') {
+          return new Response(JSON.stringify({
+            items: [{
+              name: 'Customer Portal',
+              appId: 'com.example.app',
+            }],
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+        }
+
+        throw new Error(`Unexpected request: ${url.pathname}`)
+      }) as typeof fetch
+
+      console.log = () => {}
+
+      await handleInit({ cwd }, {
+        'api-key': 'test-key',
+        'api-url': 'https://api.otalan.com',
+        'app-id': 'com.example.app',
+      })
+
+      await expect(Bun.file(path.join(cwd, 'otalan.config.json')).json()).resolves.toMatchObject({
+        organizationSlug: 'test-org',
+        projectSlug: 'test-project',
+        appName: 'Customer Portal',
+        appId: 'com.example.app',
+      })
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
   })
 })
 

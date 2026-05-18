@@ -13,7 +13,7 @@ import {
   type CommandContext,
 } from '../cli/helpers'
 import type { MobilePlatform, Target } from '../config'
-import { formatBundleIdSource, printJson } from '../cli/output'
+import { formatBundleIdSource, formatProjectConfigSummary, printJson } from '../cli/output'
 import { promptSelectWithHint, promptWithHint, type PromptWithHintInput } from '../cli/prompts'
 import type { BundleManifest } from '../bundle'
 import { listReleases, type ReleaseItem } from '../http'
@@ -52,6 +52,20 @@ type ExistingPublishedBundleCheck = {
 
 function isInteractiveTerminal() {
   return Boolean(stdin.isTTY && stdout.isTTY)
+}
+
+async function printBundleProjectContext(context: CommandContext) {
+  const project = await resolveProject(context).catch(() => null)
+
+  if (!project) {
+    return
+  }
+
+  for (const line of formatProjectConfigSummary(project).split('\n')) {
+    console.log(line)
+  }
+
+  console.log('')
 }
 
 function resolveManifestRuntimeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
@@ -362,6 +376,8 @@ function assertNoExistingPublishedBundle(input: ExistingPublishedBundleCheck) {
 // -----------------------------------------------------------------------------
 
 export async function handleBundle(context: CommandContext, options: Record<string, string | boolean>) {
+  await printBundleProjectContext(context)
+
   const targetFallback = readStringOption(options, 'target')
     ? undefined
     : await promptSelectWithHint({

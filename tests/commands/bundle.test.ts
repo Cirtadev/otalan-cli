@@ -79,6 +79,46 @@ function createReleaseContextResponse() {
 // -----------------------------------------------------------------------------
 
 describe('handleBundle', () => {
+  test('prints the linked project and app before packaging', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-bundle-context-'))
+    const output: string[] = []
+
+    try {
+      await mkdir(path.join(cwd, 'dist'), { recursive: true })
+      await Bun.write(path.join(cwd, 'dist', 'index.html'), '<script src="app.js"></script>')
+      await Bun.write(path.join(cwd, 'dist', 'app.js'), 'console.log("app")')
+      await Bun.write(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
+        organizationSlug: 'test-org',
+        projectSlug: 'mobile-app',
+        appName: 'Customer Portal',
+        appId: 'com.example.app',
+      }, null, 2)}\n`)
+
+      console.log = (...args: unknown[]) => {
+        output.push(args.map(String).join(' '))
+      }
+      globalThis.fetch = (async () => {
+        throw new Error('Network unavailable.')
+      }) as unknown as typeof fetch
+
+      await handleBundle({ cwd }, {
+        target: 'capacitor',
+        platform: 'ios',
+        'runtime-version': '1.2.3',
+        'bundle-id': '1.2.3-web.1',
+      })
+
+      expect(output).toContain('Organization: test-org')
+      expect(output).toContain('Project: mobile-app')
+      expect(output).toContain('App: Customer Portal (com.example.app)')
+      expect(output.indexOf('App: Customer Portal (com.example.app)')).toBeLessThan(
+        output.indexOf('Build web assets before running `otalan bundle`.'),
+      )
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
+  })
+
   test('rejects an already published bundle ID before writing output', async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-bundle-'))
     const outputDir = path.join(cwd, '.otalan', 'bundle')

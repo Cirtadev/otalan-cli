@@ -1,4 +1,5 @@
 import type { BundleIdSource } from '../bundle'
+import type { ProjectConfig } from '../config'
 import type { BundleIngestItem, ReleaseContext, ReleaseItem } from '../http'
 
 // -----------------------------------------------------------------------------
@@ -24,19 +25,42 @@ export function formatBundleIdSource(source: BundleIdSource) {
   }
 }
 
-function formatReleaseContextEntity(name: string, slug: string) {
-  if (name && name !== slug) {
-    return `${name} (${slug})`
+function formatContextEntity(name: string | undefined, identifier: string | undefined) {
+  if (name && identifier && name !== identifier) {
+    return `${name} (${identifier})`
   }
 
-  return slug
+  return name ?? identifier ?? 'unknown'
 }
 
-export function formatReleaseContextSummary(context: ReleaseContext) {
-  return [
-    `Organization: ${formatReleaseContextEntity(context.organizationName, context.organizationSlug)}`,
-    `Project: ${formatReleaseContextEntity(context.projectName, context.projectSlug)}`,
-  ].join('\n')
+export function formatProjectConfigSummary(config: ProjectConfig) {
+  const lines = [
+    config.organizationSlug
+      ? `Organization: ${config.organizationSlug}`
+      : undefined,
+    config.projectSlug
+      ? `Project: ${config.projectSlug}`
+      : undefined,
+    `App: ${formatContextEntity(config.appName, config.appId)}`,
+  ].filter(Boolean)
+
+  return lines.join('\n')
+}
+
+export function formatReleaseContextSummary(
+  context: ReleaseContext,
+  app?: { name?: string, appId: string },
+) {
+  const lines = [
+    `Organization: ${formatContextEntity(context.organizationName, context.organizationSlug)}`,
+    `Project: ${formatContextEntity(context.projectName, context.projectSlug)}`,
+  ]
+
+  if (app) {
+    lines.push(`App: ${formatContextEntity(app.name, app.appId)}`)
+  }
+
+  return lines.join('\n')
 }
 
 export function printHelp(version: string, options: { includeNotes?: boolean } = {}) {

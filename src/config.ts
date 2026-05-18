@@ -19,6 +19,7 @@ const globalConfigSchema = z.object({
 const projectConfigSchema = z.object({
   organizationSlug: z.string().min(1).optional(),
   projectSlug: z.string().min(1).optional(),
+  appName: z.string().min(1).optional(),
   appId: z.string().min(1),
 })
 
@@ -82,6 +83,7 @@ export async function saveProjectConfig(cwd: string, config: ProjectConfig) {
   await writeJsonFile(path.join(cwd, PROJECT_CONFIG_FILE), {
     organizationSlug: parsed.organizationSlug,
     projectSlug: parsed.projectSlug,
+    appName: parsed.appName,
     appId: parsed.appId,
   })
 }

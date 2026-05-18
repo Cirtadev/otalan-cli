@@ -151,6 +151,7 @@ async function createProjectFixture() {
   await writeFile(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
     organizationSlug: 'test-org',
     projectSlug: 'mobile-app',
+    appName: 'Customer Portal',
     appId: 'com.example.app',
   }, null, 2)}\n`)
 
@@ -176,7 +177,7 @@ function createReleaseContextResponse() {
 }
 
 describe('release command context output', () => {
-  test('prints organization and project before running a release command', async () => {
+  test('prints organization, project, and app before running a release command', async () => {
     const cwd = await createProjectFixture()
     const output: string[] = []
     const requestedPaths: string[] = []
@@ -245,6 +246,7 @@ describe('release command context output', () => {
     expect(requestedPaths[0]).toBe('/v1/releases/context')
     expect(output).toContain('Organization: Test Organization (test-org)')
     expect(output).toContain('Project: Mobile App (mobile-app)')
+    expect(output).toContain('App: Customer Portal (com.example.app)')
   })
 })
 

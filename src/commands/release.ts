@@ -64,7 +64,10 @@ async function resolveReleaseAccess(
     projectSlug: project.projectSlug,
   })
 
-  for (const line of formatReleaseContextSummary(releaseContext).split('\n')) {
+  for (const line of formatReleaseContextSummary(releaseContext, {
+    name: project.appName,
+    appId: project.appId,
+  }).split('\n')) {
     console.log(line)
   }
 
