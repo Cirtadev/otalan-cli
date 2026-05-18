@@ -2,6 +2,12 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.3.3 - 2026-05-18
+
+### Changed
+
+- Write bundle archives as `bundle-<bundle-id>.zip` while keeping `otalan publish` compatible with legacy `bundle.zip` output.
+
 ## 1.3.2 - 2026-05-18
 
 ### Added

@@ -186,7 +186,7 @@ describe('handleBundle', () => {
         'GET /v1/releases/context',
         'GET /v1/releases',
       ])
-      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
+      expect(await Bun.file(path.join(outputDir, 'bundle-1.2.3-web.1.zip')).exists()).toBe(false)
       expect(await Bun.file(path.join(outputDir, 'manifest.json')).exists()).toBe(false)
     } finally {
       await rm(cwd, { recursive: true, force: true })

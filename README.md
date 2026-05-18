@@ -309,7 +309,7 @@ otalan init \
 
 ### `otalan bundle`
 
-Builds `.otalan/bundle/bundle.zip` and `.otalan/bundle/manifest.json`.
+Builds `.otalan/bundle/bundle-<bundle-id>.zip` and `.otalan/bundle/manifest.json`.
 
 `.otalan/` is generated output. Add it to your app repo's `.gitignore`; `otalan publish` reads the bundle files from the current CI workspace after `otalan bundle` runs.
 

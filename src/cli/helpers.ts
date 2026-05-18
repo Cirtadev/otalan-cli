@@ -7,7 +7,11 @@ import {
   type MobilePlatform,
   type Target,
 } from '../config'
-import type { BundleManifest } from '../bundle'
+import {
+  LEGACY_BUNDLE_ARCHIVE_FILE_NAME,
+  createBundleArchiveFileName,
+  type BundleManifest,
+} from '../bundle'
 import { readStringOption } from './args'
 import { getReleaseContext } from '../http'
 
@@ -21,8 +25,6 @@ export type BundleArchive = {
   contentType: string
   body: Blob
 }
-
-const BUNDLE_ARCHIVE_FILE_NAME = 'bundle.zip'
 
 export function resolveApiKeysUrl() {
   return 'https://otalan.com/api-keys'
@@ -161,22 +163,36 @@ export function resolveManifestDefaultRuntimeVersion(manifest: BundleManifest | 
   return manifest.runtimeVersion
 }
 
-export async function openBundleArchive(outputDir: string): Promise<BundleArchive> {
-  const archivePath = path.join(outputDir, BUNDLE_ARCHIVE_FILE_NAME)
-  const body = Bun.file(archivePath)
+export async function openBundleArchive(outputDir: string, manifest?: BundleManifest): Promise<BundleArchive> {
+  const resolvedManifest = manifest ?? await readBundleManifest(outputDir)
+  const preferredFileName = createBundleArchiveFileName(resolvedManifest.bundleId)
+  const fileNames = preferredFileName === LEGACY_BUNDLE_ARCHIVE_FILE_NAME
+    ? [preferredFileName]
+    : [preferredFileName, LEGACY_BUNDLE_ARCHIVE_FILE_NAME]
 
-  if (!(await body.exists())) {
-    throw new Error(`Missing bundle archive at ${archivePath}. Rebuild the bundle before publishing.`)
+  for (const fileName of fileNames) {
+    const archivePath = path.join(outputDir, fileName)
+    const body = Bun.file(archivePath)
+
+    if (!(await body.exists())) {
+      continue
+    }
+
+    if (body.size === 0) {
+      throw new Error(`Bundle archive at ${archivePath} is empty. Rebuild the bundle before publishing.`)
+    }
+
+    return {
+      fileName,
+      fileSizeBytes: body.size,
+      contentType: 'application/zip',
+      body,
+    }
   }
 
-  if (body.size === 0) {
-    throw new Error(`Bundle archive at ${archivePath} is empty. Rebuild the bundle before publishing.`)
-  }
+  const checkedPaths = fileNames
+    .map(fileName => path.join(outputDir, fileName))
+    .join(', ')
 
-  return {
-    fileName: BUNDLE_ARCHIVE_FILE_NAME,
-    fileSizeBytes: body.size,
-    contentType: 'application/zip',
-    body,
-  }
+  throw new Error(`Missing bundle archive at ${checkedPaths}. Rebuild the bundle before publishing.`)
 }

@@ -36,6 +36,8 @@ export type ExpoBundleManifest = BundleBaseManifest & {
 export type BundleManifest = CapacitorBundleManifest | ExpoBundleManifest
 export type BundleIdSource = 'flag' | 'prompt' | 'runtime-version' | 'package-json'
 
+export const LEGACY_BUNDLE_ARCHIVE_FILE_NAME = 'bundle.zip'
+
 type BundleOptions = {
   cwd: string
   outputDir: string
@@ -51,6 +53,7 @@ type BundleOptions = {
 
 type BundleResult = {
   outputDir: string
+  archiveFileName: string
   manifest: BundleManifest
   bundleIdSource: BundleIdSource
   omittedSourceMapCount: number
@@ -173,12 +176,6 @@ async function zipDirectory(directoryPath: string): Promise<ZipDirectoryResult> 
   }
 }
 
-async function writeBundleOutput(outputDir: string, bundleBytes: Uint8Array, manifest: BundleManifest) {
-  await mkdir(outputDir, { recursive: true })
-  await Bun.write(path.join(outputDir, 'bundle.zip'), bundleBytes)
-  await Bun.write(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-}
-
 function hashBytes(bytes: Uint8Array) {
   return createHash('sha256').update(bytes).digest('hex')
 }
@@ -193,8 +190,23 @@ function normalizeBundleId(seed: string) {
   return normalizedSeed
 }
 
+export function createBundleArchiveFileName(bundleId: string) {
+  return `bundle-${normalizeBundleId(bundleId)}.zip`
+}
+
 function createAutoBundleId(seed: string, hash: string) {
   return `${normalizeBundleId(seed)}-${hash.slice(0, 12)}`
+}
+
+async function writeBundleOutput(outputDir: string, bundleBytes: Uint8Array, manifest: BundleManifest) {
+  const archiveFileName = createBundleArchiveFileName(manifest.bundleId)
+
+  await mkdir(outputDir, { recursive: true })
+  await rm(path.join(outputDir, LEGACY_BUNDLE_ARCHIVE_FILE_NAME), { force: true })
+  await Bun.write(path.join(outputDir, archiveFileName), bundleBytes)
+  await Bun.write(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+
+  return archiveFileName
 }
 
 async function readPackageVersion(cwd: string) {
@@ -685,6 +697,7 @@ async function createExpoExportDirectory(cwd: string) {
 
 export const bundleTestUtils = {
   normalizeBundleId,
+  createBundleArchiveFileName,
   createAutoBundleId,
   resolveBundleId,
   resolveExpoRuntimeVersion,
@@ -743,10 +756,11 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
   }
 
   await options.beforeWrite?.(manifest)
-  await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
+  const archiveFileName = await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
 
   return {
     outputDir: options.outputDir,
+    archiveFileName,
     manifest,
     bundleIdSource,
     omittedSourceMapCount: bundleArchive.omittedSourceMapCount,
@@ -798,10 +812,11 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
     }
 
     await options.beforeWrite?.(manifest)
-    await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
+    const archiveFileName = await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
 
     return {
       outputDir: options.outputDir,
+      archiveFileName,
       manifest,
       bundleIdSource,
       omittedSourceMapCount: bundleArchive.omittedSourceMapCount,

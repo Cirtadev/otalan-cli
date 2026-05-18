@@ -21,6 +21,20 @@ describe('bundleTestUtils.normalizeBundleId', () => {
   })
 })
 
+describe('bundleTestUtils.createBundleArchiveFileName', () => {
+  test('adds the normalized bundle ID before the ZIP extension', () => {
+    expect(bundleTestUtils.createBundleArchiveFileName('  release 1/ios  ')).toBe('bundle-release-1-ios.zip')
+  })
+
+  test('removes path separators and other unsafe filename characters', () => {
+    expect(bundleTestUtils.createBundleArchiveFileName('../release @ ios:beta')).toBe('bundle-..-release-ios-beta.zip')
+  })
+
+  test('uses the bundle fallback for archive names with no safe bundle ID characters', () => {
+    expect(bundleTestUtils.createBundleArchiveFileName('***')).toBe('bundle-bundle.zip')
+  })
+})
+
 describe('bundleTestUtils.resolveBundleId', () => {
   test('prefers an explicit bundle ID', () => {
     expect(bundleTestUtils.resolveBundleId({
@@ -173,9 +187,11 @@ describe('bundleProject', () => {
 
     try {
       await mkdir(path.join(rootDir, 'dist', 'assets'), { recursive: true })
+      await mkdir(outputDir, { recursive: true })
       await Bun.write(path.join(rootDir, 'dist', 'index.html'), '<script src="assets/app.js"></script>')
       await Bun.write(path.join(rootDir, 'dist', 'assets', 'app.js'), 'console.log("app")')
       await Bun.write(path.join(rootDir, 'dist', 'assets', 'app.js.map'), '{}')
+      await Bun.write(path.join(outputDir, 'bundle.zip'), 'stale zip')
 
       const result = await bundleProject({
         cwd: rootDir,
@@ -184,9 +200,11 @@ describe('bundleProject', () => {
         platform: 'ios',
         target: 'capacitor',
       })
-      const zipBytes = new Uint8Array(await Bun.file(path.join(outputDir, 'bundle.zip')).arrayBuffer())
+      const zipBytes = new Uint8Array(await Bun.file(path.join(outputDir, result.archiveFileName)).arrayBuffer())
       const zipEntries = unzipSync(zipBytes)
 
+      expect(result.archiveFileName).toBe(`bundle-${result.manifest.bundleId}.zip`)
+      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
       expect(Object.keys(zipEntries).sort()).toEqual([
         'assets/app.js',
         'index.html',
@@ -220,6 +238,33 @@ describe('bundleProject', () => {
 
       expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
       expect(await Bun.file(path.join(outputDir, 'manifest.json')).exists()).toBe(false)
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('uses the normalized explicit bundle ID in the archive file name', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-capacitor-project-'))
+    const outputDir = path.join(rootDir, '.otalan', 'bundle')
+
+    try {
+      await mkdir(path.join(rootDir, 'dist'), { recursive: true })
+      await Bun.write(path.join(rootDir, 'dist', 'index.html'), '<script src="app.js"></script>')
+      await Bun.write(path.join(rootDir, 'dist', 'app.js'), 'console.log("app")')
+
+      const result = await bundleProject({
+        cwd: rootDir,
+        outputDir,
+        bundleId: ' release @ ios:beta ',
+        explicitBundleIdSource: 'flag',
+        runtimeVersion: '1.0.0',
+        platform: 'ios',
+        target: 'capacitor',
+      })
+
+      expect(result.manifest.bundleId).toBe('release-ios-beta')
+      expect(result.archiveFileName).toBe('bundle-release-ios-beta.zip')
+      expect(await Bun.file(path.join(outputDir, result.archiveFileName)).exists()).toBe(true)
     } finally {
       await rm(rootDir, { recursive: true, force: true })
     }
@@ -309,9 +354,11 @@ describe('bundleProject', () => {
         platform: 'ios',
         target: 'expo',
       })
-      const zipBytes = new Uint8Array(await Bun.file(path.join(outputDir, 'bundle.zip')).arrayBuffer())
+      const zipBytes = new Uint8Array(await Bun.file(path.join(outputDir, result.archiveFileName)).arrayBuffer())
       const zipEntries = unzipSync(zipBytes)
 
+      expect(result.archiveFileName).toBe(`bundle-${result.manifest.bundleId}.zip`)
+      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
       expect(Object.keys(zipEntries).sort()).toEqual([
         '_expo/static/js/ios/entry.js',
         'assets/icon.png',

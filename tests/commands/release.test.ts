@@ -436,7 +436,7 @@ describe('handlePublish', () => {
     const events: string[] = []
 
     await mkdir(outputDir, { recursive: true })
-    await writeFile(path.join(outputDir, 'bundle.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'bundle-1.0.0-web.2.zip'), 'zip-bytes')
     await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
     console.log = () => {}
@@ -481,7 +481,7 @@ describe('handlePublish', () => {
           channel: 'production',
           runtimeVersion: '1.0.0',
           bundleId: '1.0.0-web.2',
-          fileName: 'bundle.zip',
+          fileName: 'bundle-1.0.0-web.2.zip',
           fileSizeBytes: 9,
           contentType: 'application/zip',
           mandatory: true,
@@ -598,7 +598,7 @@ describe('handlePublish', () => {
     const events: string[] = []
 
     await mkdir(outputDir, { recursive: true })
-    await writeFile(path.join(outputDir, 'bundle.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'bundle-1.0.0-web.3.zip'), 'zip-bytes')
     await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
     console.log = () => {}

@@ -136,20 +136,68 @@ describe('resolveApiKeysUrl', () => {
 })
 
 describe('openBundleArchive', () => {
-  test('returns a disk-backed archive body without wrapping bytes in File', async () => {
+  test('opens the bundle-ID suffixed archive body without wrapping bytes in File', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-archive-'))
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(path.join(outputDir, 'bundle-1.0.0-abc123.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(capacitorManifest, null, 2)}\n`)
+
+    const archive = await openBundleArchive(outputDir)
+
+    expect(archive.fileName).toBe('bundle-1.0.0-abc123.zip')
+    expect(archive.fileSizeBytes).toBe(9)
+    expect(archive.contentType).toBe('application/zip')
+    expect(archive.body).toBeInstanceOf(Blob)
+    expect(archive.body).not.toBeInstanceOf(File)
+    expect(await archive.body.text()).toBe('zip-bytes')
+  })
+
+  test('falls back to legacy bundle.zip output', async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-archive-'))
     const outputDir = path.join(cwd, '.otalan', 'bundle')
 
     await mkdir(outputDir, { recursive: true })
     await writeFile(path.join(outputDir, 'bundle.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(capacitorManifest, null, 2)}\n`)
 
     const archive = await openBundleArchive(outputDir)
 
     expect(archive.fileName).toBe('bundle.zip')
-    expect(archive.fileSizeBytes).toBe(9)
-    expect(archive.contentType).toBe('application/zip')
-    expect(archive.body).toBeInstanceOf(Blob)
-    expect(archive.body).not.toBeInstanceOf(File)
+    expect(await archive.body.text()).toBe('zip-bytes')
+  })
+
+  test('prefers the manifest bundle archive when both current and legacy files exist', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-archive-'))
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(path.join(outputDir, 'bundle-1.0.0-abc123.zip'), 'current-zip-bytes')
+    await writeFile(path.join(outputDir, 'bundle.zip'), 'legacy-zip-bytes')
+    await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(capacitorManifest, null, 2)}\n`)
+
+    const archive = await openBundleArchive(outputDir)
+
+    expect(archive.fileName).toBe('bundle-1.0.0-abc123.zip')
+    expect(await archive.body.text()).toBe('current-zip-bytes')
+  })
+
+  test('uses the normalized manifest bundle ID when opening the archive', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-archive-'))
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+    const manifest: BundleManifest = {
+      ...capacitorManifest,
+      bundleId: 'release @ ios:beta',
+    }
+
+    await mkdir(outputDir, { recursive: true })
+    await writeFile(path.join(outputDir, 'bundle-release-ios-beta.zip'), 'zip-bytes')
+    await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+
+    const archive = await openBundleArchive(outputDir)
+
+    expect(archive.fileName).toBe('bundle-release-ios-beta.zip')
     expect(await archive.body.text()).toBe('zip-bytes')
   })
 })

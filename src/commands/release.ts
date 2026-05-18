@@ -270,7 +270,7 @@ export async function handlePublish(
   const mandatory = !readBooleanOption(options, 'optional', false)
   const rolloutPercent = resolveRolloutPercent(options)
   const releaseNotes = readStringOption(options, 'release-notes')
-  const archive = await openBundleArchive(outputDir)
+  const archive = await openBundleArchive(outputDir, manifest)
   const uploadIntent = await createReleaseUploadIntent({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
