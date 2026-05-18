@@ -10,7 +10,7 @@ export type ReleaseItem = {
   appId: string
   platform: MobilePlatform
   channel: string
-  nativeVersion: string
+  runtimeVersion: string
   bundleId: string
   releaseStorageId: string
   checksum: string | null
@@ -46,7 +46,7 @@ export type BundleIngestItem = {
   appId: string
   platform: MobilePlatform
   channel: string
-  nativeVersion: string
+  runtimeVersion: string
   bundleId: string
   releaseStorageId: string
   status: string
@@ -69,7 +69,7 @@ type ReleaseIdentity = {
   appId: string
   platform: MobilePlatform
   channel: string
-  nativeVersion: string
+  runtimeVersion: string
   bundleId: string
 }
 
@@ -186,7 +186,7 @@ export async function createReleaseUploadIntent(
       appId: input.appId,
       platform: input.platform,
       channel: input.channel,
-      nativeVersion: input.nativeVersion,
+      runtimeVersion: input.runtimeVersion,
       bundleId: input.bundleId,
       mandatory: input.mandatory,
       rolloutPercent: input.rolloutPercent,
@@ -289,7 +289,7 @@ export async function rollbackRelease(input: ReleaseClientConfig & {
   appId: string
   platform: MobilePlatform
   channel: string
-  nativeVersion: string
+  runtimeVersion: string
   targetBundleId: string
 }) {
   const payload = await requestJson<{
@@ -303,7 +303,7 @@ export async function rollbackRelease(input: ReleaseClientConfig & {
       appId: input.appId,
       platform: input.platform,
       channel: input.channel,
-      nativeVersion: input.nativeVersion,
+      runtimeVersion: input.runtimeVersion,
       targetBundleId: input.targetBundleId,
     },
   })
@@ -325,7 +325,7 @@ async function updateReleaseRolloutState(input: ReleaseClientConfig & ReleaseTup
       appId: input.appId,
       platform: input.platform,
       channel: input.channel,
-      nativeVersion: input.nativeVersion,
+      runtimeVersion: input.runtimeVersion,
     },
   })
 
@@ -350,7 +350,7 @@ export async function listReleases(input: ReleaseClientConfig & {
   appId: string
   platform?: MobilePlatform
   channel?: string
-  nativeVersion?: string
+  runtimeVersion?: string
   bundleId?: string
 }) {
   const payload = await requestJson<{
@@ -363,7 +363,7 @@ export async function listReleases(input: ReleaseClientConfig & {
       appId: input.appId,
       platform: input.platform,
       channel: input.channel,
-      nativeVersion: input.nativeVersion,
+      runtimeVersion: input.runtimeVersion,
       bundleId: input.bundleId,
     },
   })

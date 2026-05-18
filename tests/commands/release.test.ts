@@ -28,7 +28,7 @@ function createIngest(overrides: Partial<BundleIngestItem> = {}): BundleIngestIt
     appId: 'com.example.app',
     platform: 'ios',
     channel: 'production',
-    nativeVersion: '1.0.0',
+    runtimeVersion: '1.0.0',
     bundleId: '1.0.0-web.2',
     releaseStorageId: 'release-storage-123',
     status: 'pending',
@@ -51,7 +51,7 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
     appId: 'com.example.app',
     platform: 'ios',
     channel: 'production',
-    nativeVersion: '1.0.0',
+    runtimeVersion: '1.0.0',
     bundleId: '1.0.0-web.1',
     releaseStorageId: 'release-storage-123',
     checksum: 'abc123',
@@ -215,7 +215,7 @@ describe('release command context output', () => {
         expect(url.searchParams.get('appId')).toBe('com.example.app')
         expect(url.searchParams.get('platform')).toBe('ios')
         expect(url.searchParams.get('channel')).toBe('production')
-        expect(url.searchParams.get('nativeVersion')).toBe('1.0.0')
+        expect(url.searchParams.get('runtimeVersion')).toBe('1.0.0')
 
         return new Response(JSON.stringify({
           items: [createRelease({
@@ -239,7 +239,7 @@ describe('release command context output', () => {
       'api-key': 'test-key',
       platform: 'ios',
       channel: 'production',
-      'native-version': '1.0.0',
+      'runtime-version': '1.0.0',
     })
 
     expect(requestedPaths[0]).toBe('/v1/releases/context')
@@ -279,7 +279,7 @@ describe('handlePause', () => {
           appId: 'com.example.app',
           platform: 'ios',
           channel: 'production',
-          nativeVersion: '1.0.0',
+          runtimeVersion: '1.0.0',
         })
 
         return new Response(JSON.stringify({
@@ -302,7 +302,7 @@ describe('handlePause', () => {
       'api-key': 'test-key',
       platform: 'ios',
       channel: 'production',
-      'native-version': '1.0.0',
+      'runtime-version': '1.0.0',
     })
 
     expect(requestedPaths).toEqual([
@@ -343,7 +343,7 @@ describe('handlePause', () => {
       'api-key': 'test-key',
       platform: 'ios',
       channel: 'production',
-      'native-version': '1.0.0',
+      'runtime-version': '1.0.0',
     })).rejects.toThrow('No active bundle found for the selected release tuple')
   })
 })
@@ -375,7 +375,7 @@ describe('handleResume', () => {
           appId: 'com.example.app',
           platform: 'ios',
           channel: 'production',
-          nativeVersion: '1.0.0',
+          runtimeVersion: '1.0.0',
         })
 
         return new Response(JSON.stringify({
@@ -398,7 +398,7 @@ describe('handleResume', () => {
       'api-key': 'test-key',
       platform: 'ios',
       channel: 'production',
-      'native-version': '1.0.0',
+      'runtime-version': '1.0.0',
     })
 
     expect(requestedPaths).toEqual([
@@ -421,7 +421,6 @@ describe('handlePublish', () => {
     const manifest = {
       target: 'expo',
       hash: '0'.repeat(64),
-      nativeVersion: '2.0.0',
       runtimeVersion: '1.0.0',
       bundleId: '1.0.0-web.2',
       launchAsset: '_expo/static/js/ios/entry.hbc',
@@ -478,7 +477,7 @@ describe('handlePublish', () => {
           appId: 'com.example.app',
           platform: 'ios',
           channel: 'production',
-          nativeVersion: '1.0.0',
+          runtimeVersion: '1.0.0',
           bundleId: '1.0.0-web.2',
           fileName: 'bundle.zip',
           fileSizeBytes: 9,
@@ -491,7 +490,6 @@ describe('handlePublish', () => {
           launchAsset: '_expo/static/js/ios/entry.hbc',
           assets: ['assets/icon.png'],
           runtimeVersion: '1.0.0',
-          nativeVersion: '1.0.0',
           bundleId: '1.0.0-web.2',
           expoConfig: {
             scheme: 'example',
@@ -590,7 +588,7 @@ describe('handlePublish', () => {
     const manifest = {
       target: 'capacitor',
       hash: '0'.repeat(64),
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
       bundleId: '1.0.0-web.3',
       createdAt: '2026-04-21T00:00:00.000Z',
       platform: 'ios',

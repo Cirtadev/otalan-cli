@@ -117,33 +117,18 @@ export function resolveManifestPlatform(manifest: BundleManifest, optionPlatform
   throw new Error('Bundle manifest is missing platform. Rebuild the bundle or pass --platform.')
 }
 
-function resolveManifestReleaseNativeVersion(manifest: BundleManifest) {
-  return manifest.target === 'expo'
-    ? manifest.runtimeVersion
-    : manifest.nativeVersion
-}
+export function resolveManifestRuntimeVersion(manifest: BundleManifest, optionRuntimeVersion?: string) {
+  const manifestRuntimeVersion = manifest.runtimeVersion
 
-function resolveManifestReleaseNativeVersionField(manifest: BundleManifest) {
-  return manifest.target === 'expo' ? 'runtimeVersion' : 'nativeVersion'
-}
-
-export function resolveManifestNativeVersion(manifest: BundleManifest, optionNativeVersion?: string) {
-  const manifestNativeVersion = resolveManifestReleaseNativeVersion(manifest)
-  const manifestNativeVersionField = resolveManifestReleaseNativeVersionField(manifest)
-
-  if (optionNativeVersion && manifestNativeVersion && optionNativeVersion !== manifestNativeVersion) {
-    throw new Error(`Bundle manifest ${manifestNativeVersionField} "${manifestNativeVersion}" does not match --native-version "${optionNativeVersion}".`)
+  if (!manifestRuntimeVersion) {
+    throw new Error('Bundle manifest is missing runtimeVersion. Rebuild the bundle.')
   }
 
-  if (manifestNativeVersion) {
-    return manifestNativeVersion
+  if (optionRuntimeVersion && manifestRuntimeVersion && optionRuntimeVersion !== manifestRuntimeVersion) {
+    throw new Error(`Bundle manifest runtimeVersion "${manifestRuntimeVersion}" does not match --runtime-version "${optionRuntimeVersion}".`)
   }
 
-  if (optionNativeVersion) {
-    return optionNativeVersion
-  }
-
-  throw new Error(`Bundle manifest is missing ${manifestNativeVersionField}. Rebuild the bundle or pass --native-version.`)
+  return manifestRuntimeVersion
 }
 
 export async function readBundleManifest(outputDir: string) {
@@ -164,7 +149,7 @@ export async function readBundleManifestIfExists(outputDir: string) {
   return readBundleManifest(outputDir)
 }
 
-export function resolveManifestDefaultNativeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
+export function resolveManifestDefaultRuntimeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
   if (!manifest) {
     return undefined
   }
@@ -173,7 +158,7 @@ export function resolveManifestDefaultNativeVersion(manifest: BundleManifest | n
     return undefined
   }
 
-  return resolveManifestReleaseNativeVersion(manifest)
+  return manifest.runtimeVersion
 }
 
 export async function openBundleArchive(outputDir: string): Promise<BundleArchive> {

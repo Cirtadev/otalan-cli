@@ -29,7 +29,7 @@ function createQueuedIngest(overrides: Record<string, unknown> = {}) {
     appId: 'com.example.app',
     platform: 'ios',
     channel: 'production',
-    nativeVersion: '1.0.0',
+    runtimeVersion: '1.0.0',
     bundleId: '1.0.0-web.2',
     status: 'pending',
     failureReason: null,
@@ -51,7 +51,7 @@ function createRelease(overrides: Record<string, unknown> = {}) {
     appId: 'com.example.app',
     platform: 'ios',
     channel: 'production',
-    nativeVersion: '1.0.0',
+    runtimeVersion: '1.0.0',
     bundleId: '1.0.0-web.2',
     releaseStorageId: 'release-storage-123',
     checksum: 'abc123',
@@ -222,7 +222,7 @@ describe('createReleaseUploadIntent', () => {
       appId: 'com.example.app',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
       bundleId: '1.0.0-web.2',
       mandatory: false,
       rolloutPercent: 25,
@@ -243,7 +243,7 @@ describe('createReleaseUploadIntent', () => {
       appId: 'com.example.app',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
       bundleId: '1.0.0-web.2',
       mandatory: false,
       rolloutPercent: 25,
@@ -343,7 +343,7 @@ describe('pauseRelease', () => {
       appId: 'com.example.app',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
     })
 
     expect(item.rolloutState).toBe('paused')
@@ -351,7 +351,7 @@ describe('pauseRelease', () => {
       appId: 'com.example.app',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
     })
   })
 })
@@ -385,7 +385,7 @@ describe('resumeRelease', () => {
       appId: 'com.example.app',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
     })
 
     expect(item.rolloutState).toBe('active')
@@ -393,7 +393,7 @@ describe('resumeRelease', () => {
       appId: 'com.example.app',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
     })
   })
 })

@@ -1,7 +1,7 @@
 import path from 'node:path'
 
 import type { BundleManifest } from '../bundle'
-import { resolveProjectNativeVersion } from '../bundle'
+import { resolveProjectRuntimeVersion } from '../bundle'
 import { readBooleanOption, readStringOption } from '../cli/args'
 import {
   assertReleaseContextMatchesConfig,
@@ -9,8 +9,8 @@ import {
   readBundleManifest,
   readBundleManifestIfExists,
   resolveApiConfig,
-  resolveManifestDefaultNativeVersion,
-  resolveManifestNativeVersion,
+  resolveManifestDefaultRuntimeVersion,
+  resolveManifestRuntimeVersion,
   resolveManifestPlatform,
   resolvePlatform,
   resolveProject,
@@ -86,18 +86,18 @@ function resolveOutputDir(
   )
 }
 
-async function resolveDefaultNativeVersion(
+async function resolveDefaultRuntimeVersion(
   context: CommandContext,
   options: Record<string, string | boolean>,
   platform: MobilePlatform,
 ) {
   const manifest = await readBundleManifestIfExists(resolveOutputDir(context, options))
 
-  return readStringOption(options, 'native-version')
-    ?? resolveManifestDefaultNativeVersion(manifest, platform)
-    ?? await resolveProjectNativeVersion(context.cwd, platform).catch(async () => promptWithHint({
-      question: 'Native version',
-      hint: 'Exact native app version.',
+  return readStringOption(options, 'runtime-version')
+    ?? resolveManifestDefaultRuntimeVersion(manifest, platform)
+    ?? await resolveProjectRuntimeVersion(context.cwd, platform).catch(async () => promptWithHint({
+      question: 'Runtime version',
+      hint: 'Exact runtime version.',
     }))
 }
 
@@ -134,9 +134,9 @@ async function resolveReleaseTupleFromManifest(
     manifest,
     readStringOption(options, 'platform'),
   )
-  const nativeVersion = resolveManifestNativeVersion(
+  const runtimeVersion = resolveManifestRuntimeVersion(
     manifest,
-    readStringOption(options, 'native-version'),
+    readStringOption(options, 'runtime-version'),
   )
   const channel = readStringOption(options, 'channel') ?? await promptWithHint({
     question: 'Channel',
@@ -148,7 +148,7 @@ async function resolveReleaseTupleFromManifest(
     outputDir,
     manifest,
     platform,
-    nativeVersion,
+    runtimeVersion,
     channel,
   }
 }
@@ -162,8 +162,8 @@ async function resolveRemoteReleaseTuple(
     ? undefined
     : await promptPlatformChoice()
   const platform = resolvePlatform(options, platformFallback)
-  const nativeVersion = readStringOption(options, 'native-version')
-    ?? await resolveDefaultNativeVersion(context, options, platform)
+  const runtimeVersion = readStringOption(options, 'runtime-version')
+    ?? await resolveDefaultRuntimeVersion(context, options, platform)
   const channel = readStringOption(options, 'channel') ?? await promptWithHint({
     question: 'Channel',
     fallback: 'production',
@@ -172,7 +172,7 @@ async function resolveRemoteReleaseTuple(
 
   return {
     platform,
-    nativeVersion,
+    runtimeVersion,
     channel,
   }
 }
@@ -182,10 +182,7 @@ function resolveManifestExpoPublishMetadata(manifest: BundleManifest) {
     return undefined
   }
 
-  return JSON.stringify({
-    ...manifest,
-    nativeVersion: manifest.runtimeVersion,
-  })
+  return JSON.stringify(manifest)
 }
 
 function isTerminalIngestStatus(status: string) {
@@ -266,7 +263,7 @@ export async function handlePublish(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const { outputDir, manifest, platform, nativeVersion, channel } = await resolveReleaseTupleFromManifest(context, options)
+  const { outputDir, manifest, platform, runtimeVersion, channel } = await resolveReleaseTupleFromManifest(context, options)
   const mandatory = !readBooleanOption(options, 'optional', false)
   const rolloutPercent = resolveRolloutPercent(options)
   const releaseNotes = readStringOption(options, 'release-notes')
@@ -277,7 +274,7 @@ export async function handlePublish(
     appId: project.appId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
     bundleId: manifest.bundleId,
     mandatory,
     rolloutPercent,
@@ -315,7 +312,7 @@ export async function handlePublish(
     bundleId: manifest.bundleId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
     rolloutPercent,
     mandatory,
     releaseNotes,
@@ -361,7 +358,7 @@ export async function handleRollback(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+  const { platform, runtimeVersion, channel } = await resolveRemoteReleaseTuple(
     context,
     options,
     'Release channel for this rollback.',
@@ -373,7 +370,7 @@ export async function handleRollback(
     appId: project.appId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
   })
   const targetBundleId = await resolveRollbackTargetBundleId({
     options,
@@ -383,7 +380,7 @@ export async function handleRollback(
   const targetRelease = releases.find(item => item.bundleId === targetBundleId)
 
   if (!targetRelease) {
-    throw new Error(`Bundle "${targetBundleId}" was not found for the selected platform, channel, and nativeVersion.`)
+    throw new Error(`Bundle "${targetBundleId}" was not found for the selected platform, channel, and runtimeVersion.`)
   }
 
   if (!targetRelease.resolvedDownloadUrl) {
@@ -396,7 +393,7 @@ export async function handleRollback(
     appId: project.appId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
     targetBundleId,
   })
 
@@ -407,7 +404,7 @@ export async function handleRollback(
     bundleId: item.bundleId,
     platform: item.platform,
     channel: item.channel,
-    nativeVersion: item.nativeVersion,
+    runtimeVersion: item.runtimeVersion,
     rolloutPercent: item.rolloutPercent,
     rolloutState: item.rolloutState,
     releaseNotes: item.releaseNotes,
@@ -422,7 +419,7 @@ async function handleRolloutStateChange(
   action: 'pause' | 'resume',
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+  const { platform, runtimeVersion, channel } = await resolveRemoteReleaseTuple(
     context,
     options,
     `Release channel to ${action}.`,
@@ -434,7 +431,7 @@ async function handleRolloutStateChange(
     appId: project.appId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
   })
 
   console.log('')
@@ -444,7 +441,7 @@ async function handleRolloutStateChange(
     bundleId: item.bundleId,
     platform: item.platform,
     channel: item.channel,
-    nativeVersion: item.nativeVersion,
+    runtimeVersion: item.runtimeVersion,
     rolloutPercent: item.rolloutPercent,
     rolloutState: item.rolloutState,
     releaseNotes: item.releaseNotes,
@@ -472,7 +469,7 @@ export async function handleStatus(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+  const { platform, runtimeVersion, channel } = await resolveRemoteReleaseTuple(
     context,
     options,
     'Release channel.',
@@ -484,12 +481,12 @@ export async function handleStatus(
     appId: project.appId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
   })
   const active = releases.find(item => item.isActive) ?? null
 
   if (!active) {
-    console.log('No active bundle found for the selected platform, channel, and nativeVersion.')
+    console.log('No active bundle found for the selected platform, channel, and runtimeVersion.')
     return
   }
 
@@ -499,7 +496,7 @@ export async function handleStatus(
     bundleId: active.bundleId,
     platform: active.platform,
     channel: active.channel,
-    nativeVersion: active.nativeVersion,
+    runtimeVersion: active.runtimeVersion,
     rolloutPercent: active.rolloutPercent,
     rolloutState: active.rolloutState,
     releaseNotes: active.releaseNotes,
@@ -513,7 +510,7 @@ export async function handleBundlesList(
   options: Record<string, string | boolean>,
 ) {
   const { api, project } = await resolveReleaseAccess(context, options)
-  const { platform, nativeVersion, channel } = await resolveRemoteReleaseTuple(
+  const { platform, runtimeVersion, channel } = await resolveRemoteReleaseTuple(
     context,
     options,
     'Release channel.',
@@ -525,7 +522,7 @@ export async function handleBundlesList(
     appId: project.appId,
     platform,
     channel,
-    nativeVersion,
+    runtimeVersion,
   })
 
   printBundlesTable(releases)

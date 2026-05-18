@@ -28,7 +28,7 @@ describe('bundleTestUtils.resolveBundleId', () => {
       explicitBundleIdSource: 'flag',
       bundleFromPackage: true,
       packageVersion: '2.0.0',
-      nativeVersion: '3.0.0',
+      runtimeVersion: '3.0.0',
       hash: 'abcdef1234567890',
     })).toEqual({
       bundleId: '1.0.5-beta',
@@ -40,7 +40,7 @@ describe('bundleTestUtils.resolveBundleId', () => {
     expect(bundleTestUtils.resolveBundleId({
       bundleId: '  1.0.5 beta ',
       explicitBundleIdSource: 'prompt',
-      nativeVersion: '3.0.0',
+      runtimeVersion: '3.0.0',
       hash: 'abcdef1234567890',
     })).toEqual({
       bundleId: '1.0.5-beta',
@@ -52,7 +52,7 @@ describe('bundleTestUtils.resolveBundleId', () => {
     expect(bundleTestUtils.resolveBundleId({
       bundleFromPackage: true,
       packageVersion: '2.0.0',
-      nativeVersion: '3.0.0',
+      runtimeVersion: '3.0.0',
       hash: 'abcdef1234567890',
     })).toEqual({
       bundleId: '2.0.0',
@@ -60,13 +60,13 @@ describe('bundleTestUtils.resolveBundleId', () => {
     })
   })
 
-  test('generates an auto bundle ID from nativeVersion and hash by default', () => {
+  test('generates an auto bundle ID from runtimeVersion and hash by default', () => {
     expect(bundleTestUtils.resolveBundleId({
-      nativeVersion: '3.0.0',
+      runtimeVersion: '3.0.0',
       hash: 'abcdef1234567890',
     })).toEqual({
       bundleId: '3.0.0-abcdef123456',
-      bundleIdSource: 'native-version',
+      bundleIdSource: 'runtime-version',
     })
   })
 })
@@ -117,6 +117,53 @@ describe('bundleTestUtils.zipDirectory', () => {
       await rm(rootDir, { recursive: true, force: true })
     }
   })
+
+  test('rejects native project files before generating a bundle ZIP', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-bundle-test-'))
+
+    try {
+      await mkdir(path.join(rootDir, 'android', 'app'), { recursive: true })
+      await mkdir(path.join(rootDir, 'assets'), { recursive: true })
+      await Bun.write(path.join(rootDir, 'index.html'), '<script src="assets/app.js"></script>')
+      await Bun.write(path.join(rootDir, 'assets', 'app.js'), 'console.log("ok")')
+      await Bun.write(path.join(rootDir, 'android', 'app', 'build.gradle'), 'android {}')
+
+      await expect(bundleTestUtils.zipDirectory(rootDir)).rejects.toThrow(
+        'Native project files were found in bundle input',
+      )
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('bundleTestUtils.findNativeBundleEntries', () => {
+  test('detects native bundle entries without flagging Expo platform folders', () => {
+    expect(bundleTestUtils.findNativeBundleEntries([
+      '_expo/static/js/ios/entry.js',
+      'assets/icon.png',
+    ])).toEqual([])
+
+    expect(bundleTestUtils.findNativeBundleEntries([
+      'android/app/build.gradle',
+      'assets/app.js',
+      'ios/App/AppDelegate.swift',
+      'plugins/MyPlugin.xcodeproj/project.pbxproj',
+    ])).toEqual([
+      {
+        path: 'android/app/build.gradle',
+        reason: 'native platform directory',
+      },
+      {
+        path: 'ios/App/AppDelegate.swift',
+        reason: 'native platform directory',
+      },
+      {
+        path: 'plugins/MyPlugin.xcodeproj/project.pbxproj',
+        reason: 'native project directory',
+      },
+    ])
+  })
 })
 
 describe('bundleProject', () => {
@@ -133,7 +180,7 @@ describe('bundleProject', () => {
       const result = await bundleProject({
         cwd: rootDir,
         outputDir,
-        nativeVersion: '1.0.0',
+        runtimeVersion: '1.0.0',
         platform: 'ios',
         target: 'capacitor',
       })
@@ -145,6 +192,31 @@ describe('bundleProject', () => {
         'index.html',
       ])
       expect(result.omittedSourceMapCount).toBe(1)
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects Capacitor bundle input that contains native project files', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-capacitor-project-'))
+    const outputDir = path.join(rootDir, '.otalan', 'bundle')
+
+    try {
+      await mkdir(path.join(rootDir, 'dist', 'android', 'app'), { recursive: true })
+      await Bun.write(path.join(rootDir, 'dist', 'index.html'), '<script src="app.js"></script>')
+      await Bun.write(path.join(rootDir, 'dist', 'app.js'), 'console.log("app")')
+      await Bun.write(path.join(rootDir, 'dist', 'android', 'app', 'build.gradle'), 'android {}')
+
+      await expect(bundleProject({
+        cwd: rootDir,
+        outputDir,
+        runtimeVersion: '1.0.0',
+        platform: 'android',
+        target: 'capacitor',
+      })).rejects.toThrow('Native project files were found in bundle input')
+
+      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
+      expect(await Bun.file(path.join(outputDir, 'manifest.json')).exists()).toBe(false)
     } finally {
       await rm(rootDir, { recursive: true, force: true })
     }
@@ -223,15 +295,82 @@ describe('bundleProject', () => {
       await rm(rootDir, { recursive: true, force: true })
     }
   })
+
+  test('rejects Expo export output that contains native project files', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-expo-project-'))
+    const outputDir = path.join(rootDir, '.otalan', 'bundle')
+    const originalSpawn = Bun.spawn
+    const bunWithSpawn = Bun as typeof Bun & {
+      spawn: typeof Bun.spawn
+    }
+
+    try {
+      bunWithSpawn.spawn = ((command: string[]) => {
+        const outputDirIndex = command.indexOf('--output-dir')
+
+        if (
+          command[0] === 'bunx'
+          && command[1] === 'expo'
+          && command[2] === 'export'
+          && outputDirIndex !== -1
+        ) {
+          const exportDir = command[outputDirIndex + 1]
+
+          return {
+            exited: (async () => {
+              await mkdir(path.join(exportDir, '_expo', 'static', 'js', 'ios'), { recursive: true })
+              await mkdir(path.join(exportDir, 'ios', 'App'), { recursive: true })
+              await Bun.write(path.join(exportDir, '_expo', 'static', 'js', 'ios', 'entry.js'), 'console.log("expo")')
+              await Bun.write(path.join(exportDir, 'ios', 'App', 'AppDelegate.swift'), 'import UIKit')
+
+              return 0
+            })(),
+          } as unknown as ReturnType<typeof Bun.spawn>
+        }
+
+        if (
+          command[0] === 'bunx'
+          && command[1] === 'expo'
+          && command[2] === 'config'
+          && command[3] === '--json'
+        ) {
+          return {
+            exited: Promise.resolve(0),
+            stdout: new Blob([JSON.stringify({
+              expo: {
+                version: '1.0.0',
+                runtimeVersion: '1.0.0',
+              },
+            })]),
+          } as unknown as ReturnType<typeof Bun.spawn>
+        }
+
+        throw new Error(`Unexpected spawn command: ${command.join(' ')}`)
+      }) as typeof Bun.spawn
+
+      await expect(bundleProject({
+        cwd: rootDir,
+        outputDir,
+        platform: 'ios',
+        target: 'expo',
+      })).rejects.toThrow('Native project files were found in bundle input')
+
+      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
+      expect(await Bun.file(path.join(outputDir, 'manifest.json')).exists()).toBe(false)
+    } finally {
+      bunWithSpawn.spawn = originalSpawn
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
 })
 
 // -----------------------------------------------------------------------------
 // Expo helpers
 // -----------------------------------------------------------------------------
 
-describe('bundleTestUtils.resolveExpoNativeVersion', () => {
-  test('prefers an explicit native version override', () => {
-    expect(bundleTestUtils.resolveExpoNativeVersion({
+describe('bundleTestUtils.resolveExpoRuntimeVersion', () => {
+  test('prefers an explicit runtime version override', () => {
+    expect(bundleTestUtils.resolveExpoRuntimeVersion({
       version: '1.0.0',
       ios: {
         version: '1.0.1',
@@ -239,17 +378,17 @@ describe('bundleTestUtils.resolveExpoNativeVersion', () => {
     }, 'ios', '9.9.9')).toBe('9.9.9')
   })
 
-  test('uses platform-specific values before falling back to top-level version', () => {
-    expect(bundleTestUtils.resolveExpoNativeVersion({
+  test('uses the fallback runtime version when Expo has no runtimeVersion', () => {
+    expect(bundleTestUtils.resolveExpoRuntimeVersion({
       version: '1.0.0',
       ios: {
         version: '1.0.1',
       },
-    }, 'ios')).toBe('1.0.1')
+    }, 'ios', undefined, undefined, '1.0.1')).toBe('1.0.1')
 
-    expect(bundleTestUtils.resolveExpoNativeVersion({
+    expect(bundleTestUtils.resolveExpoRuntimeVersion({
       version: '1.0.0',
-    }, 'android')).toBe('1.0.0')
+    }, 'android', undefined, undefined, '1.0.0')).toBe('1.0.0')
   })
 })
 
@@ -266,7 +405,7 @@ describe('bundleTestUtils.resolveExpoRuntimeVersion', () => {
     }, 'ios', undefined, '2.0.0')).toBe('2.0.0')
   })
 
-  test('falls back to the native version when Expo has no runtimeVersion', () => {
+  test('falls back to the runtime version when Expo has no runtimeVersion', () => {
     expect(bundleTestUtils.resolveExpoRuntimeVersion({
       version: '1.0.0',
     }, 'ios', undefined, undefined, '1.0.0')).toBe('1.0.0')
@@ -287,15 +426,13 @@ describe('bundleTestUtils.resolveExpoRuntimeVersion', () => {
       },
     }, 'android')).toBe('exposdk:52.0.0')
 
-    expect(bundleTestUtils.resolveExpoRuntimeVersion({
-      version: '1.2.3',
-      ios: {
-        buildNumber: '45',
-        runtimeVersion: {
-          policy: 'nativeVersion',
-        },
+    expect(() => bundleTestUtils.resolveExpoRuntimeVersion({
+      runtimeVersion: {
+        policy: 'runtimeVersion',
       },
-    }, 'ios')).toBe('1.2.3(45)')
+    }, 'ios')).toThrow(
+      'Unable to resolve Expo runtimeVersion policy "runtimeVersion". Pass --runtime-version or use a resolved Expo runtimeVersion.',
+    )
   })
 })
 

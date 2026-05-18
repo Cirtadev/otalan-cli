@@ -11,7 +11,7 @@ import type { ReleaseItem } from '../../src/http'
 const MANIFEST = {
   target: 'capacitor',
   hash: 'abc123',
-  nativeVersion: '1.2.3',
+  runtimeVersion: '1.2.3',
   bundleId: '1.2.3-web.4',
   createdAt: '2026-05-04T00:00:00.000Z',
   platform: 'ios',
@@ -24,7 +24,7 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
     appId: 'com.example.app',
     platform: 'ios',
     channel: 'production',
-    nativeVersion: '1.2.3',
+    runtimeVersion: '1.2.3',
     bundleId: '1.2.3-web.1',
     releaseStorageId: 'release-storage-123',
     checksum: 'abc123',
@@ -45,14 +45,14 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
 // Bundle prompt resolution
 // -----------------------------------------------------------------------------
 
-describe('bundleCommandTestUtils.resolveBundleNativeVersionInput', () => {
-  test('uses explicit native version without prompting', async () => {
-    const nativeVersion = await bundleCommandTestUtils.resolveBundleNativeVersionInput({
+describe('bundleCommandTestUtils.resolveBundleRuntimeVersionInput', () => {
+  test('uses explicit runtime version without prompting', async () => {
+    const runtimeVersion = await bundleCommandTestUtils.resolveBundleRuntimeVersionInput({
       context: {
         cwd: '/tmp/project',
       },
       options: {
-        'native-version': '9.9.9',
+        'runtime-version': '9.9.9',
       },
       platform: 'ios',
       manifest: MANIFEST,
@@ -62,12 +62,12 @@ describe('bundleCommandTestUtils.resolveBundleNativeVersionInput', () => {
       },
     })
 
-    expect(nativeVersion).toBe('9.9.9')
+    expect(runtimeVersion).toBe('9.9.9')
   })
 
-  test('prompts with the active native version as fallback', async () => {
+  test('prompts with the active runtime version as fallback', async () => {
     const prompts: Array<{ hint: string, fallback?: string }> = []
-    const nativeVersion = await bundleCommandTestUtils.resolveBundleNativeVersionInput({
+    const runtimeVersion = await bundleCommandTestUtils.resolveBundleRuntimeVersionInput({
       context: {
         cwd: '/tmp/project',
       },
@@ -75,7 +75,7 @@ describe('bundleCommandTestUtils.resolveBundleNativeVersionInput', () => {
       platform: 'ios',
       manifest: MANIFEST,
       isInteractive: true,
-      detectNativeVersion: async () => '2.0.0',
+      detectRuntimeVersion: async () => '2.0.0',
       prompt: async input => {
         prompts.push({
           hint: input.hint,
@@ -85,21 +85,21 @@ describe('bundleCommandTestUtils.resolveBundleNativeVersionInput', () => {
       },
     })
 
-    expect(nativeVersion).toBe('2.0.0')
+    expect(runtimeVersion).toBe('2.0.0')
     expect(prompts).toEqual([
       {
         fallback: '2.0.0',
         hint: [
-          'Active native version: 2.0.0',
-          'Current bundle native version: 1.2.3',
-          'Press Enter to use the active native version, or type another exact native app version.',
+          'Active runtime version: 2.0.0',
+          'Current bundle runtime version: 1.2.3',
+          'Press Enter to use the active runtime version, or type another exact runtime version.',
         ].join('\n'),
       },
     ])
   })
 
-  test('does not prompt for native version in non-interactive mode', async () => {
-    const nativeVersion = await bundleCommandTestUtils.resolveBundleNativeVersionInput({
+  test('does not prompt for runtime version in non-interactive mode', async () => {
+    const runtimeVersion = await bundleCommandTestUtils.resolveBundleRuntimeVersionInput({
       context: {
         cwd: '/tmp/project',
       },
@@ -112,7 +112,7 @@ describe('bundleCommandTestUtils.resolveBundleNativeVersionInput', () => {
       },
     })
 
-    expect(nativeVersion).toBeUndefined()
+    expect(runtimeVersion).toBeUndefined()
   })
 })
 
@@ -123,7 +123,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
         'bundle-id': '9.9.9-web.1',
       },
       platform: 'ios',
-      nativeVersion: '1.2.3',
+      runtimeVersion: '1.2.3',
       manifest: MANIFEST,
       isInteractive: true,
       prompt: async () => {
@@ -142,7 +142,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
     const input = await bundleCommandTestUtils.resolveBundleIdInput({
       options: {},
       platform: 'ios',
-      nativeVersion: '2.0.0',
+      runtimeVersion: '2.0.0',
       manifest: MANIFEST,
       publishedBundle: {
         channel: 'production',
@@ -169,7 +169,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
         hint: [
           'Local bundle ID: 1.2.3-web.4',
           'Published bundle ID (production): 1.2.3-web.3',
-          'Type the bundle ID to release, or press Enter to generate one from nativeVersion and the bundle hash.',
+          'Type the bundle ID to release, or press Enter to generate one from runtimeVersion and the bundle hash.',
         ].join('\n'),
       },
     ])
@@ -179,7 +179,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
     const input = await bundleCommandTestUtils.resolveBundleIdInput({
       options: {},
       platform: 'ios',
-      nativeVersion: '1.2.3',
+      runtimeVersion: '1.2.3',
       manifest: MANIFEST,
       isInteractive: true,
       prompt: async () => '',
@@ -196,7 +196,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
     const input = await bundleCommandTestUtils.resolveBundleIdInput({
       options: {},
       platform: 'android',
-      nativeVersion: '2.0.0',
+      runtimeVersion: '2.0.0',
       manifest: MANIFEST,
       publishedBundle: {
         channel: 'production',
@@ -222,7 +222,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
         hint: [
           'No local bundle ID found for this platform.',
           'Published bundle ID (production): none found.',
-          'Type the bundle ID to release, or press Enter to generate one from nativeVersion and the bundle hash.',
+          'Type the bundle ID to release, or press Enter to generate one from runtimeVersion and the bundle hash.',
         ].join('\n'),
       },
     ])
@@ -234,7 +234,7 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
         'bundle-from-package': true,
       },
       platform: 'ios',
-      nativeVersion: '1.2.3',
+      runtimeVersion: '1.2.3',
       manifest: MANIFEST,
       isInteractive: true,
       prompt: async () => {
@@ -259,12 +259,12 @@ describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
         channel: 'staging',
       },
       platform: 'android',
-      nativeVersion: '2.0.0',
+      runtimeVersion: '2.0.0',
       loadPublishedBundleId: async input => {
         expect(input).toEqual({
           channel: 'staging',
           platform: 'android',
-          nativeVersion: '2.0.0',
+          runtimeVersion: '2.0.0',
         })
 
         return '2.0.0-web.1'
@@ -285,7 +285,7 @@ describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
       },
       options: {},
       platform: 'ios',
-      nativeVersion: '2.0.0',
+      runtimeVersion: '2.0.0',
       loadPublishedBundleId: async input => input.channel,
     })
 
@@ -296,7 +296,7 @@ describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
     })
   })
 
-  test('skips published bundle lookup when native version is unavailable', async () => {
+  test('skips published bundle lookup when runtime version is unavailable', async () => {
     const hint = await bundleCommandTestUtils.resolvePublishedBundleHint({
       context: {
         cwd: '/tmp/project',
@@ -318,7 +318,7 @@ describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
       },
       options: {},
       platform: 'ios',
-      nativeVersion: '2.0.0',
+      runtimeVersion: '2.0.0',
       loadPublishedBundleId: async () => {
         throw new Error('Network unavailable.')
       },

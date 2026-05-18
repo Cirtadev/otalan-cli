@@ -48,7 +48,7 @@ describe('formatBundleSummary', () => {
       bundleId: '1.0.0-web.2',
       platform: 'ios',
       channel: 'production',
-      nativeVersion: '1.0.0',
+      runtimeVersion: '1.0.0',
       publishedAt: '2026-04-22T00:00:00.000Z',
     })).toContain('Published at: 2026-04-22T00:00:00.000Z')
   })

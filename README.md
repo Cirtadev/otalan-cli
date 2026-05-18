@@ -222,7 +222,7 @@ Example project config:
 }
 ```
 
-`otalan.config.json` only links the repo to an Otalan project/app. Bundle and release targeting data such as `target`, `platform`, `nativeVersion`, `runtimeVersion`, and `bundleId` live in `.otalan/bundle/manifest.json`.
+`otalan.config.json` only links the repo to an Otalan project/app. Bundle and release targeting data such as `target`, `platform`, `runtimeVersion`, and `bundleId` live in `.otalan/bundle/manifest.json`.
 
 ## Command Reference
 
@@ -338,17 +338,16 @@ Current behavior:
 - Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
 - source map files (`*.map`) are omitted from bundle ZIPs by default; the CLI prints the omitted file count when any are skipped
-- `--platform` is required so the CLI exports the selected platform and resolves the correct native/runtime version
+- native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
+- `--platform` is required so the CLI exports the selected platform and resolves the correct runtime version
 
-Native version defaults:
+Runtime version defaults:
 
-- In an interactive terminal, `otalan bundle` prompts for the native version after showing the detected active native version.
-- Capacitor iOS reads `CFBundleShortVersionString` from `Info.plist` and resolves `$(MARKETING_VERSION)` from the Xcode project when needed
-- Capacitor Android reads `versionName` from `android/app/build.gradle` or `build.gradle.kts`
-- Expo reads the selected platform version from Expo config and falls back to the top-level Expo `version`
-- Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings; if none are present, the CLI falls back to the resolved native version
-- Expo publishes use `runtimeVersion` as the Otalan release `nativeVersion` because Expo update checks send `expo-runtime-version`
-- `--native-version` overrides auto-detection
+- In an interactive terminal, `otalan bundle` prompts for the runtime version after showing the detected active runtime version.
+- Capacitor iOS defaults runtimeVersion from `CFBundleShortVersionString` in `Info.plist` and resolves `$(MARKETING_VERSION)` from the Xcode project when needed
+- Capacitor Android defaults runtimeVersion from `versionName` in `android/app/build.gradle` or `build.gradle.kts`
+- Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings; if none are present, the CLI falls back to the selected platform Expo `version`
+- `--runtime-version` overrides auto-detection
 
 For Expo projects, the recommended app config is:
 
@@ -385,10 +384,10 @@ otalan bundle --target expo --platform ios --bundle-id 1.0.5
 If you omit `bundleId`:
 
 - in an interactive terminal, the CLI prompts for a bundle ID and shows the local bundle ID from `.otalan/bundle/manifest.json` when available
-- when `otalan login` and `otalan init` are configured, the prompt also shows the active published bundle ID for the selected platform/native version/channel
+- when `otalan login` and `otalan init` are configured, the prompt also shows the active published bundle ID for the selected platform/runtime version/channel
 - published bundle hints use `--channel`, defaulting to `production`
 - pressing Enter without a bundle ID keeps the automatic bundle ID behavior
-- the CLI reads `nativeVersion` from the selected native platform and adds a short hash suffix
+- the CLI reads `runtimeVersion` from the selected platform and adds a short hash suffix
 - example: `1.0.0-abc123def456`
 
 If you want to take the bundle ID from `package.json` instead:
@@ -402,20 +401,20 @@ otalan bundle --target expo --platform ios --bundle-from-package
 
 Publishes the current bundle output with rollout metadata.
 
-`otalan publish` uses the `bundleId`, `platform`, and release version stored in `.otalan/bundle/manifest.json`. Capacitor uses `nativeVersion`; Expo uses `runtimeVersion`. To release `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
+`otalan publish` uses the `bundleId`, `platform`, and `runtimeVersion` stored in `.otalan/bundle/manifest.json`. To release `1.0.5`, set it when you run `otalan bundle --bundle-id 1.0.5`.
 
 Current behavior:
 
 - `channel` is chosen at publish time
 - publishes are mandatory by default
 - default rollout is `100`
-- `--platform` and `--native-version` can override the manifest, but only if they match it
+- `--platform` and `--runtime-version` can override the manifest, but only if they match it
 - `--output-dir` lets you publish a bundle from a non-default folder
 - `--rollout-percent` accepts an integer from `0` to `100`
 - `--optional` marks the update as non-mandatory
 - `--release-notes` attaches release notes to the published bundle
 - Expo publish forwards the full generated Otalan satellite manifest when present
-- Expo publish sends `runtimeVersion` as the API `nativeVersion` and normalizes the serialized `expoManifest.nativeVersion` to the same value for server validation
+- Expo publish sends the generated manifest with `runtimeVersion`
 - Otalan validates the release ZIP before the publish completes
 - active rollouts can be paused and resumed later without changing the selected bundle
 
@@ -458,9 +457,9 @@ Remote bundle tables display the API `publishedAt` timestamp, not the bundle row
 
 Default resolution order:
 
-1. `--native-version`
+1. `--runtime-version`
 2. `.otalan/bundle/manifest.json` if present and the manifest platform matches the selected platform
-3. native version derived from the selected platform in the local app project
+3. runtime version derived from the selected platform in the local app project
 4. interactive prompt
 
 ```bash
@@ -471,7 +470,7 @@ otalan bundles --platform ios --channel production
 
 Reactivates an older bundle for the same tuple.
 
-`rollback` uses the same native-version default order as `bundles`. Pass `--native-version` if you want to override the detected default.
+`rollback` uses the same runtime-version default order as `bundles`. Pass `--runtime-version` if you want to override the detected default.
 
 ```bash
 otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
@@ -481,7 +480,7 @@ otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
 
 Pauses delivery of the currently active bundle for the selected release tuple.
 
-`pause` uses the same native-version default order as `bundles`. The active bundle remains selected, but new OTA checks stop receiving it until you resume the rollout.
+`pause` uses the same runtime-version default order as `bundles`. The active bundle remains selected, but new OTA checks stop receiving it until you resume the rollout.
 
 ```bash
 otalan pause --platform ios --channel production
@@ -491,7 +490,7 @@ otalan pause --platform ios --channel production
 
 Resumes delivery of the currently active bundle for the selected release tuple.
 
-`resume` uses the same native-version default order as `bundles`.
+`resume` uses the same runtime-version default order as `bundles`.
 
 ```bash
 otalan resume --platform ios --channel production
@@ -503,7 +502,7 @@ Shows the active bundle for the selected release tuple.
 
 The active bundle summary displays `publishedAt` as `Published at`.
 
-`status` also uses the same native-version default order as `bundles`.
+`status` also uses the same runtime-version default order as `bundles`.
 
 ```bash
 otalan status --platform ios --channel production
@@ -517,7 +516,7 @@ otalan status --platform ios --channel production
 {
   "target": "capacitor",
   "hash": "sha256...",
-  "nativeVersion": "1.0.0",
+  "runtimeVersion": "1.0.0",
   "bundleId": "1.0.0-abcdef123456",
   "createdAt": "2026-04-07T12:00:00.000Z",
   "platform": "ios"
@@ -530,7 +529,6 @@ otalan status --platform ios --channel production
 {
   "target": "expo",
   "hash": "sha256...",
-  "nativeVersion": "1.0.0",
   "runtimeVersion": "1.0.0",
   "bundleId": "1.0.0-abcdef123456",
   "launchAsset": "bundles/ios-xxxxx.js",

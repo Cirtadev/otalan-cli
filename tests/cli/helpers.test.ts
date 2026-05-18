@@ -7,8 +7,8 @@ import type { BundleManifest } from '../../src/bundle'
 import {
   openBundleArchive,
   resolveApiKeysUrl,
-  resolveManifestDefaultNativeVersion,
-  resolveManifestNativeVersion,
+  resolveManifestDefaultRuntimeVersion,
+  resolveManifestRuntimeVersion,
   resolveManifestPlatform,
   resolvePlatform,
   resolveTarget,
@@ -21,7 +21,7 @@ import {
 const capacitorManifest: BundleManifest = {
   target: 'capacitor',
   hash: 'abc123',
-  nativeVersion: '1.0.0',
+  runtimeVersion: '1.0.0',
   bundleId: '1.0.0-abc123',
   createdAt: '2026-04-10T00:00:00.000Z',
   platform: 'ios',
@@ -30,7 +30,6 @@ const capacitorManifest: BundleManifest = {
 const expoManifest: BundleManifest = {
   target: 'expo',
   hash: 'def456',
-  nativeVersion: '2.0.0',
   runtimeVersion: '1.0.0',
   bundleId: '1.0.0-def456',
   launchAsset: '_expo/static/js/ios/entry.hbc',
@@ -89,30 +88,44 @@ describe('manifest tuple helpers', () => {
     )
   })
 
-  test('returns the manifest native version when it matches the option', () => {
-    expect(resolveManifestNativeVersion(capacitorManifest, '1.0.0')).toBe('1.0.0')
+  test('returns the manifest runtime version when it matches the option', () => {
+    expect(resolveManifestRuntimeVersion(capacitorManifest, '1.0.0')).toBe('1.0.0')
   })
 
-  test('uses the Expo runtimeVersion as the release nativeVersion', () => {
-    expect(resolveManifestNativeVersion(expoManifest, '1.0.0')).toBe('1.0.0')
-    expect(resolveManifestDefaultNativeVersion(expoManifest, 'ios')).toBe('1.0.0')
+  test('uses the Expo runtimeVersion as the release runtimeVersion', () => {
+    expect(resolveManifestRuntimeVersion(expoManifest, '1.0.0')).toBe('1.0.0')
+    expect(resolveManifestDefaultRuntimeVersion(expoManifest, 'ios')).toBe('1.0.0')
   })
 
-  test('throws when the manifest native version conflicts with the option', () => {
-    expect(() => resolveManifestNativeVersion(capacitorManifest, '2.0.0')).toThrow(
-      'Bundle manifest nativeVersion "1.0.0" does not match --native-version "2.0.0".',
+  test('throws when the manifest runtime version conflicts with the option', () => {
+    expect(() => resolveManifestRuntimeVersion(capacitorManifest, '2.0.0')).toThrow(
+      'Bundle manifest runtimeVersion "1.0.0" does not match --runtime-version "2.0.0".',
     )
   })
 
   test('throws when the Expo manifest runtimeVersion conflicts with the option', () => {
-    expect(() => resolveManifestNativeVersion(expoManifest, '2.0.0')).toThrow(
-      'Bundle manifest runtimeVersion "1.0.0" does not match --native-version "2.0.0".',
+    expect(() => resolveManifestRuntimeVersion(expoManifest, '2.0.0')).toThrow(
+      'Bundle manifest runtimeVersion "1.0.0" does not match --runtime-version "2.0.0".',
     )
   })
 
-  test('only uses the manifest native version as a default when the platform matches', () => {
-    expect(resolveManifestDefaultNativeVersion(capacitorManifest, 'ios')).toBe('1.0.0')
-    expect(resolveManifestDefaultNativeVersion(capacitorManifest, 'android')).toBeUndefined()
+  test('rejects manifests without runtimeVersion', () => {
+    const legacyManifest = {
+      target: 'capacitor',
+      hash: 'abc123',
+      bundleId: '1.0.0-abc123',
+      createdAt: '2026-04-10T00:00:00.000Z',
+      platform: 'ios',
+    } as unknown as BundleManifest
+
+    expect(() => resolveManifestRuntimeVersion(legacyManifest, '1.0.0')).toThrow(
+      'Bundle manifest is missing runtimeVersion. Rebuild the bundle.',
+    )
+  })
+
+  test('only uses the manifest runtime version as a default when the platform matches', () => {
+    expect(resolveManifestDefaultRuntimeVersion(capacitorManifest, 'ios')).toBe('1.0.0')
+    expect(resolveManifestDefaultRuntimeVersion(capacitorManifest, 'android')).toBeUndefined()
   })
 })
 

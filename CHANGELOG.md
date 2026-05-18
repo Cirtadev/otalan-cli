@@ -2,6 +2,16 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.3.0 - 2026-05-18
+
+### Added
+
+- Validate Capacitor and Expo bundle contents before writing output, rejecting native project/source files in OTA bundle data.
+
+### Changed
+
+- Use `runtimeVersion` as the only bundle manifest, CLI option, and release API field for both Capacitor and Expo.
+
 ## 1.2.2 - 2026-05-13
 
 ### Changed
@@ -25,7 +35,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 - Switch `otalan publish` to the direct-upload release contract: create JSON upload metadata, upload the ZIP to the returned opaque `uploadUrl`, complete the ingest, then poll validation.
 - Stream the local ZIP through Bun's disk-backed file body during direct uploads instead of loading the full archive into memory.
 - Send the full generated Otalan Expo satellite manifest as `expoManifest` during publish instead of only raw Expo config.
-- Use the Expo `runtimeVersion` as the release `nativeVersion` sent to the API, matching the current Expo update matching contract.
+- Use the Expo `runtimeVersion` as the release version sent to the API, matching the current Expo update matching contract.
 - Use the release bundle `publishedAt` timestamp for bundle lists, status summaries, rollback prompts, and published bundle ID hints.
 
 ## 1.1.1 - 2026-05-07
@@ -45,7 +55,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 
 - Let `otalan login` reuse the saved API URL and keep the saved CI key from a masked prompt.
 - Export Expo bundles into a project-local `.otalan/expo-export-*` folder so Expo accepts the output path.
-- Fall back to the resolved native version when Expo runtimeVersion is not configured or present in export metadata.
+- Fall back to the resolved app version when Expo runtimeVersion is not configured or present in export metadata.
 - Clarify Capacitor and Expo bundling behavior in CLI help and README.
 
 ## 1.0.9 - 2026-05-06
@@ -88,7 +98,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 
 ### Added
 
-- Prompt interactively for bundle native version and bundle ID, with hints for the detected native version, local bundle ID, and active published bundle ID when available.
+- Prompt interactively for bundle runtime version and bundle ID, with hints for the detected runtime version, local bundle ID, and active published bundle ID when available.
 
 ### Changed
 
@@ -124,5 +134,5 @@ Initial public release of the Otalan CLI.
 - Release publishing with rollout metadata and server-side validation polling.
 - Bundle listing, active bundle status, and rollback commands.
 - CI key login, project initialization, and API connectivity doctor checks.
-- Native version and Expo runtime version resolution helpers.
+- Runtime version resolution helpers.
 - Public npm package metadata, license notices, and Bun-based CLI entrypoint.

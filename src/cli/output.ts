@@ -15,8 +15,8 @@ export function formatBundleIdSource(source: BundleIdSource) {
       return 'Using bundle ID from --bundle-id.'
     case 'prompt':
       return 'Using bundle ID from prompt.'
-    case 'native-version':
-      return 'Using bundle ID from nativeVersion with a hash suffix.'
+    case 'runtime-version':
+      return 'Using bundle ID from runtimeVersion with a hash suffix.'
     case 'package-json':
       return 'Using bundle ID from package.json version.'
     default:
@@ -50,19 +50,19 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle.zip and manifest.json for Capacitor or Expo apps.'],
     ['', '[--input-dir path] [--output-dir .otalan/bundle]', ''],
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
-    ['', '[--native-version 1.0.0] [--runtime-version 1.0.0] [--channel production]', ''],
+    ['', '[--runtime-version 1.0.0] [--channel production]', ''],
     ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Publish the current bundle ZIP with rollout metadata.'],
     ['', '[--release-notes "..."] [--optional] [--rollout-percent 100]', ''],
     ['bundles', '[--platform ios|android]', 'List published bundles for a release tuple.'],
-    ['', '[--channel production] [--native-version 1.0.0]', ''],
+    ['', '[--channel production] [--runtime-version 1.0.0]', ''],
     ['rollback', '--bundle-id ... [--platform ios|android]', 'Reactivate a published bundle.'],
-    ['', '[--channel production] [--native-version 1.0.0]', ''],
+    ['', '[--channel production] [--runtime-version 1.0.0]', ''],
     ['pause', '[--platform ios|android] [--channel production]', 'Pause the active bundle rollout.'],
-    ['', '[--native-version 1.0.0]', ''],
+    ['', '[--runtime-version 1.0.0]', ''],
     ['resume', '[--platform ios|android] [--channel production]', 'Resume the active bundle rollout.'],
-    ['', '[--native-version 1.0.0]', ''],
+    ['', '[--runtime-version 1.0.0]', ''],
     ['status', '[--platform ios|android] [--channel production]', 'Show the active bundle for a release tuple.'],
-    ['', '[--native-version 1.0.0]', ''],
+    ['', '[--runtime-version 1.0.0]', ''],
   ] as const
   const notes = [
     'Official app support: Capacitor 7/8 and Expo SDK 54/55.',
@@ -116,7 +116,7 @@ export function formatBundleSummary(input: {
   bundleId: string
   platform: string
   channel: string
-  nativeVersion: string
+  runtimeVersion: string
   rolloutPercent?: number
   rolloutState?: string
   releaseNotes?: string | null
@@ -127,7 +127,7 @@ export function formatBundleSummary(input: {
     `Bundle ID: ${input.bundleId}`,
     `Platform: ${input.platform}`,
     `Channel: ${input.channel}`,
-    `Native version: ${input.nativeVersion}`,
+    `Runtime version: ${input.runtimeVersion}`,
   ]
 
   if (input.rolloutPercent !== undefined) {
@@ -157,7 +157,7 @@ export function formatPublishSummary(input: {
   bundleId: string
   platform: string
   channel: string
-  nativeVersion: string
+  runtimeVersion: string
   rolloutPercent: number
   mandatory: boolean
   releaseNotes?: string
@@ -166,7 +166,7 @@ export function formatPublishSummary(input: {
     `Bundle ID: ${input.bundleId}`,
     `Platform: ${input.platform}`,
     `Channel: ${input.channel}`,
-    `Native version: ${input.nativeVersion}`,
+    `Runtime version: ${input.runtimeVersion}`,
     `Rollout: ${input.rolloutPercent}%`,
     `Mandatory: ${input.mandatory ? 'yes' : 'no'}`,
   ]
@@ -217,14 +217,14 @@ export function printBundlesTable(items: ReleaseItem[]) {
     item.resolvedDownloadUrl ? 'yes' : 'no',
     item.resolvedDownloadUrl ? 'available' : 'deleted',
     item.bundleId,
-    item.nativeVersion,
+    item.runtimeVersion,
     item.platform,
     item.channel,
     `${item.rolloutPercent}%`,
     item.rolloutState,
     item.publishedAt.slice(0, 19).replace('T', ' '),
   ])
-  const headers = ['active', 'selectable', 'archive', 'bundleId', 'nativeVersion', 'platform', 'channel', 'rollout', 'state', 'publishedAt']
+  const headers = ['active', 'selectable', 'archive', 'bundleId', 'runtimeVersion', 'platform', 'channel', 'rollout', 'state', 'publishedAt']
   const widths = headers.map((header, index) =>
     Math.min(
       32,

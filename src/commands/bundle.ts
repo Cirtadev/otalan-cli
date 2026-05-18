@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { stdin, stdout } from 'node:process'
 
-import { bundleProject, formatOmittedSourceMapCount, resolveProjectNativeVersion } from '../bundle'
+import { bundleProject, formatOmittedSourceMapCount, resolveProjectRuntimeVersion } from '../bundle'
 import { readBooleanOption, readStringOption } from '../cli/args'
 import {
   assertReleaseContextMatchesConfig,
@@ -48,12 +48,12 @@ function isInteractiveTerminal() {
   return Boolean(stdin.isTTY && stdout.isTTY)
 }
 
-function resolveManifestNativeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
+function resolveManifestRuntimeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
   if (!manifest || manifest.platform !== platform) {
     return undefined
   }
 
-  return manifest.nativeVersion
+  return manifest.runtimeVersion
 }
 
 function resolveManifestBundleId(
@@ -67,19 +67,19 @@ function resolveManifestBundleId(
   return manifest.bundleId
 }
 
-async function resolveBundleNativeVersionInput(input: {
+async function resolveBundleRuntimeVersionInput(input: {
   context: CommandContext
   options: Record<string, string | boolean>
   platform: MobilePlatform
   manifest: BundleManifest | null
   isInteractive?: boolean
   prompt?: TextPrompt
-  detectNativeVersion?: (cwd: string, platform: MobilePlatform) => Promise<string>
+  detectRuntimeVersion?: (cwd: string, platform: MobilePlatform) => Promise<string>
 }) {
-  const explicitNativeVersion = readStringOption(input.options, 'native-version')
+  const explicitRuntimeVersion = readStringOption(input.options, 'runtime-version')
 
-  if (explicitNativeVersion) {
-    return explicitNativeVersion
+  if (explicitRuntimeVersion) {
+    return explicitRuntimeVersion
   }
 
   if (!input.isInteractive) {
@@ -87,21 +87,21 @@ async function resolveBundleNativeVersionInput(input: {
   }
 
   const prompt = input.prompt ?? promptWithHint
-  const detectNativeVersion = input.detectNativeVersion ?? resolveProjectNativeVersion
-  const activeNativeVersion = await detectNativeVersion(input.context.cwd, input.platform).catch(() => undefined)
-  const currentNativeVersion = resolveManifestNativeVersion(input.manifest, input.platform)
+  const detectRuntimeVersion = input.detectRuntimeVersion ?? resolveProjectRuntimeVersion
+  const activeRuntimeVersion = await detectRuntimeVersion(input.context.cwd, input.platform).catch(() => undefined)
+  const currentRuntimeVersion = resolveManifestRuntimeVersion(input.manifest, input.platform)
   const hintLines = [
-    activeNativeVersion
-      ? `Active native version: ${activeNativeVersion}`
-      : 'Active native version could not be detected automatically.',
-    currentNativeVersion && currentNativeVersion !== activeNativeVersion
-      ? `Current bundle native version: ${currentNativeVersion}`
+    activeRuntimeVersion
+      ? `Active runtime version: ${activeRuntimeVersion}`
+      : 'Active runtime version could not be detected automatically.',
+    currentRuntimeVersion && currentRuntimeVersion !== activeRuntimeVersion
+      ? `Current bundle runtime version: ${currentRuntimeVersion}`
       : undefined,
-    'Press Enter to use the active native version, or type another exact native app version.',
+    'Press Enter to use the active runtime version, or type another exact runtime version.',
   ].filter(Boolean)
   const answer = await prompt({
-    question: 'Native version',
-    fallback: activeNativeVersion,
+    question: 'Runtime version',
+    fallback: activeRuntimeVersion,
     hint: hintLines.join('\n'),
   })
 
@@ -111,7 +111,7 @@ async function resolveBundleNativeVersionInput(input: {
 async function resolveBundleIdInput(input: {
   options: Record<string, string | boolean>
   platform: MobilePlatform
-  nativeVersion?: string
+  runtimeVersion?: string
   manifest: BundleManifest | null
   publishedBundle?: PublishedBundleHint
   isInteractive?: boolean
@@ -147,7 +147,7 @@ async function resolveBundleIdInput(input: {
       ? `Local bundle ID: ${currentBundleId}`
       : 'No local bundle ID found for this platform.',
     formatPublishedBundleHint(input.publishedBundle),
-    'Type the bundle ID to release, or press Enter to generate one from nativeVersion and the bundle hash.',
+    'Type the bundle ID to release, or press Enter to generate one from runtimeVersion and the bundle hash.',
   ].filter(Boolean)
   const publishedBundleId = input.publishedBundle?.bundleId
   const answer = await prompt({
@@ -155,7 +155,7 @@ async function resolveBundleIdInput(input: {
     hint: hintLines.join('\n'),
     example: currentBundleId || publishedBundleId
       ? undefined
-      : `${input.nativeVersion ?? '1.0.0'}-web.1`,
+      : `${input.runtimeVersion ?? '1.0.0'}-web.1`,
   })
   const bundleId = answer.trim()
 
@@ -198,14 +198,14 @@ async function resolvePublishedBundleHint(input: {
   context: CommandContext
   options: Record<string, string | boolean>
   platform: MobilePlatform
-  nativeVersion?: string
+  runtimeVersion?: string
   loadPublishedBundleId?: (input: {
     channel: string
     platform: MobilePlatform
-    nativeVersion: string
+    runtimeVersion: string
   }) => Promise<string | undefined>
 }): Promise<PublishedBundleHint | undefined> {
-  if (!input.nativeVersion) {
+  if (!input.runtimeVersion) {
     return undefined
   }
 
@@ -218,7 +218,7 @@ async function resolvePublishedBundleHint(input: {
         bundleId: await input.loadPublishedBundleId({
           channel,
           platform: input.platform,
-          nativeVersion: input.nativeVersion,
+          runtimeVersion: input.runtimeVersion,
         }),
         checked: true,
       }
@@ -240,7 +240,7 @@ async function resolvePublishedBundleHint(input: {
       appId: project.appId,
       platform: input.platform,
       channel,
-      nativeVersion: input.nativeVersion,
+      runtimeVersion: input.runtimeVersion,
     })
 
     return {
@@ -290,7 +290,7 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     readStringOption(options, 'output-dir') ?? '.otalan/bundle',
   )
   const manifest = await readBundleManifestIfExists(outputDir)
-  const nativeVersion = await resolveBundleNativeVersionInput({
+  const runtimeVersion = await resolveBundleRuntimeVersionInput({
     context,
     options,
     platform,
@@ -306,13 +306,13 @@ export async function handleBundle(context: CommandContext, options: Record<stri
       context,
       options,
       platform,
-      nativeVersion,
+      runtimeVersion,
     })
     : undefined
   const bundleIdInput = await resolveBundleIdInput({
     options,
     platform,
-    nativeVersion,
+    runtimeVersion,
     manifest,
     publishedBundle,
     isInteractive: interactive,
@@ -331,8 +331,7 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     bundleId: bundleIdInput.bundleId,
     bundleFromPackage: readBooleanOption(options, 'bundle-from-package', false),
     explicitBundleIdSource: bundleIdInput.bundleIdSource,
-    nativeVersion,
-    runtimeVersion: readStringOption(options, 'runtime-version'),
+    runtimeVersion,
     platform,
     target,
   })
@@ -353,9 +352,9 @@ export async function handleBundle(context: CommandContext, options: Record<stri
 export const bundleCommandTestUtils = {
   formatPublishedBundleHint,
   resolveBundleIdInput,
-  resolveBundleNativeVersionInput,
+  resolveBundleRuntimeVersionInput,
   resolveManifestBundleId,
-  resolveManifestNativeVersion,
+  resolveManifestRuntimeVersion,
   resolvePublishedBundleIdFromReleases,
   resolvePublishedBundleHint,
 }
