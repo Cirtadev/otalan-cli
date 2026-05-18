@@ -197,6 +197,34 @@ describe('bundleProject', () => {
     }
   })
 
+  test('runs the manifest validation hook before writing bundle output', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-capacitor-project-'))
+    const outputDir = path.join(rootDir, '.otalan', 'bundle')
+
+    try {
+      await mkdir(path.join(rootDir, 'dist'), { recursive: true })
+      await Bun.write(path.join(rootDir, 'dist', 'index.html'), '<script src="app.js"></script>')
+      await Bun.write(path.join(rootDir, 'dist', 'app.js'), 'console.log("app")')
+
+      await expect(bundleProject({
+        cwd: rootDir,
+        outputDir,
+        runtimeVersion: '1.0.0',
+        platform: 'ios',
+        target: 'capacitor',
+        beforeWrite: async manifest => {
+          expect(manifest.bundleId.startsWith('1.0.0-')).toBe(true)
+          throw new Error('Bundle ID already exists.')
+        },
+      })).rejects.toThrow('Bundle ID already exists.')
+
+      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
+      expect(await Bun.file(path.join(outputDir, 'manifest.json')).exists()).toBe(false)
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+
   test('rejects Capacitor bundle input that contains native project files', async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-capacitor-project-'))
     const outputDir = path.join(rootDir, '.otalan', 'bundle')

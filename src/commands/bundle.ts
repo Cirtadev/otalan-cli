@@ -44,6 +44,12 @@ type PublishedBundleHint = {
   checked: boolean
 }
 
+type ExistingPublishedBundleCheck = {
+  channel: string
+  checked: boolean
+  release?: ReleaseItem
+}
+
 function isInteractiveTerminal() {
   return Boolean(stdin.isTTY && stdout.isTTY)
 }
@@ -194,6 +200,21 @@ function resolvePublishedBundleIdFromReleases(releases: ReleaseItem[]) {
     ?.bundleId
 }
 
+function findExistingPublishedBundle(input: {
+  releases: ReleaseItem[]
+  platform: MobilePlatform
+  channel: string
+  runtimeVersion: string
+  bundleId: string
+}) {
+  return input.releases.find(item =>
+    item.platform === input.platform
+    && item.channel === input.channel
+    && item.runtimeVersion === input.runtimeVersion
+    && item.bundleId === input.bundleId,
+  )
+}
+
 async function resolvePublishedBundleHint(input: {
   context: CommandContext
   options: Record<string, string | boolean>
@@ -254,6 +275,86 @@ async function resolvePublishedBundleHint(input: {
       checked: false,
     }
   }
+}
+
+async function resolveExistingPublishedBundleCheck(input: {
+  context: CommandContext
+  options: Record<string, string | boolean>
+  platform: MobilePlatform
+  runtimeVersion: string
+  bundleId: string
+  loadExistingBundle?: (input: {
+    channel: string
+    platform: MobilePlatform
+    runtimeVersion: string
+    bundleId: string
+  }) => Promise<ReleaseItem | undefined>
+}): Promise<ExistingPublishedBundleCheck> {
+  const channel = readStringOption(input.options, 'channel') ?? 'production'
+
+  try {
+    if (input.loadExistingBundle) {
+      return {
+        channel,
+        checked: true,
+        release: await input.loadExistingBundle({
+          channel,
+          platform: input.platform,
+          runtimeVersion: input.runtimeVersion,
+          bundleId: input.bundleId,
+        }),
+      }
+    }
+
+    const api = await resolveApiConfig(input.options)
+    const project = await resolveProject(input.context)
+
+    await assertReleaseContextMatchesConfig({
+      apiUrl: api.apiUrl,
+      apiKey: api.apiKey,
+      organizationSlug: project.organizationSlug,
+      projectSlug: project.projectSlug,
+    })
+
+    const releases = await listReleases({
+      apiUrl: api.apiUrl,
+      apiKey: api.apiKey,
+      appId: project.appId,
+      platform: input.platform,
+      channel,
+      runtimeVersion: input.runtimeVersion,
+      bundleId: input.bundleId,
+    })
+
+    return {
+      channel,
+      checked: true,
+      release: findExistingPublishedBundle({
+        releases,
+        platform: input.platform,
+        channel,
+        runtimeVersion: input.runtimeVersion,
+        bundleId: input.bundleId,
+      }),
+    }
+  } catch {
+    return {
+      channel,
+      checked: false,
+    }
+  }
+}
+
+function assertNoExistingPublishedBundle(input: ExistingPublishedBundleCheck) {
+  if (!input.release) {
+    return
+  }
+
+  throw new Error(
+    `Bundle ID "${input.release.bundleId}" already exists for ${input.release.platform} `
+    + `channel "${input.release.channel}" and runtimeVersion "${input.release.runtimeVersion}". `
+    + 'Choose a new bundle ID before running `otalan bundle`.',
+  )
 }
 
 // -----------------------------------------------------------------------------
@@ -334,6 +435,17 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     runtimeVersion,
     platform,
     target,
+    beforeWrite: async manifest => {
+      const existingBundleCheck = await resolveExistingPublishedBundleCheck({
+        context,
+        options,
+        platform: manifest.platform,
+        runtimeVersion: manifest.runtimeVersion,
+        bundleId: manifest.bundleId,
+      })
+
+      assertNoExistingPublishedBundle(existingBundleCheck)
+    },
   })
 
   if (result.omittedSourceMapCount > 0) {
@@ -355,6 +467,9 @@ export const bundleCommandTestUtils = {
   resolveBundleRuntimeVersionInput,
   resolveManifestBundleId,
   resolveManifestRuntimeVersion,
+  assertNoExistingPublishedBundle,
+  findExistingPublishedBundle,
+  resolveExistingPublishedBundleCheck,
   resolvePublishedBundleIdFromReleases,
   resolvePublishedBundleHint,
 }

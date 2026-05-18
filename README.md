@@ -339,6 +339,7 @@ Current behavior:
 - both outputs produce a ZIP plus `manifest.json`
 - source map files (`*.map`) are omitted from bundle ZIPs by default; the CLI prints the omitted file count when any are skipped
 - native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
+- when `otalan login` and `otalan init` are configured, the CLI checks that the selected `bundleId` is not already published for the selected platform, runtimeVersion, and channel before writing bundle output
 - `--platform` is required so the CLI exports the selected platform and resolves the correct runtime version
 
 Runtime version defaults:
@@ -386,6 +387,7 @@ If you omit `bundleId`:
 - in an interactive terminal, the CLI prompts for a bundle ID and shows the local bundle ID from `.otalan/bundle/manifest.json` when available
 - when `otalan login` and `otalan init` are configured, the prompt also shows the active published bundle ID for the selected platform/runtime version/channel
 - published bundle hints use `--channel`, defaulting to `production`
+- duplicate published bundle ID checks use the same `--channel` value and default to `production`
 - pressing Enter without a bundle ID keeps the automatic bundle ID behavior
 - the CLI reads `runtimeVersion` from the selected platform and adds a short hash suffix
 - example: `1.0.0-abc123def456`

@@ -2,6 +2,12 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.3.1 - 2026-05-18
+
+### Added
+
+- Check for an already published bundle ID during `otalan bundle` when auth and project config are available.
+
 ## 1.3.0 - 2026-05-18
 
 ### Added

@@ -1,8 +1,23 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
-import { bundleCommandTestUtils } from '../../src/commands/bundle'
+import { bundleCommandTestUtils, handleBundle } from '../../src/commands/bundle'
 import type { BundleManifest } from '../../src/bundle'
 import type { ReleaseItem } from '../../src/http'
+
+// -----------------------------------------------------------------------------
+// Test setup
+// -----------------------------------------------------------------------------
+
+const originalFetch = globalThis.fetch
+const originalConsoleLog = console.log
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  console.log = originalConsoleLog
+})
 
 // -----------------------------------------------------------------------------
 // Fixtures
@@ -40,6 +55,104 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
     ...overrides,
   }
 }
+
+function createReleaseContextResponse() {
+  return new Response(JSON.stringify({
+    item: {
+      organizationId: 'org-123',
+      organizationName: 'Test Organization',
+      organizationSlug: 'test-org',
+      projectId: 'project-123',
+      projectName: 'Mobile App',
+      projectSlug: 'mobile-app',
+    },
+  }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+}
+
+// -----------------------------------------------------------------------------
+// Bundle command
+// -----------------------------------------------------------------------------
+
+describe('handleBundle', () => {
+  test('rejects an already published bundle ID before writing output', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-bundle-'))
+    const outputDir = path.join(cwd, '.otalan', 'bundle')
+    const requests: string[] = []
+
+    try {
+      await mkdir(path.join(cwd, 'dist'), { recursive: true })
+      await Bun.write(path.join(cwd, 'dist', 'index.html'), '<script src="app.js"></script>')
+      await Bun.write(path.join(cwd, 'dist', 'app.js'), 'console.log("app")')
+      await Bun.write(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
+        organizationSlug: 'test-org',
+        projectSlug: 'mobile-app',
+        appId: 'com.example.app',
+      }, null, 2)}\n`)
+
+      console.log = () => {}
+      globalThis.fetch = (async (input, init) => {
+        const url = new URL(String(input))
+
+        requests.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+
+        if (url.pathname === '/v1/releases/context') {
+          expect(init?.headers).toEqual({
+            'x-api-key': 'test-key',
+          })
+
+          return createReleaseContextResponse()
+        }
+
+        if (url.pathname === '/v1/releases') {
+          expect(url.searchParams.get('appId')).toBe('com.example.app')
+          expect(url.searchParams.get('platform')).toBe('ios')
+          expect(url.searchParams.get('channel')).toBe('production')
+          expect(url.searchParams.get('runtimeVersion')).toBe('1.2.3')
+          expect(url.searchParams.get('bundleId')).toBe('1.2.3-web.1')
+
+          return new Response(JSON.stringify({
+            items: [createRelease({
+              runtimeVersion: '1.2.3',
+              bundleId: '1.2.3-web.1',
+            })],
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+        }
+
+        throw new Error(`Unexpected request: ${url.pathname}`)
+      }) as typeof fetch
+
+      await expect(handleBundle({ cwd }, {
+        'api-key': 'test-key',
+        'api-url': 'https://api.otalan.com',
+        target: 'capacitor',
+        platform: 'ios',
+        'runtime-version': '1.2.3',
+        'bundle-id': '1.2.3-web.1',
+      })).rejects.toThrow(
+        'Bundle ID "1.2.3-web.1" already exists for ios channel "production" and runtimeVersion "1.2.3".',
+      )
+
+      expect(requests).toEqual([
+        'GET /v1/releases/context',
+        'GET /v1/releases',
+      ])
+      expect(await Bun.file(path.join(outputDir, 'bundle.zip')).exists()).toBe(false)
+      expect(await Bun.file(path.join(outputDir, 'manifest.json')).exists()).toBe(false)
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
+  })
+})
 
 // -----------------------------------------------------------------------------
 // Bundle prompt resolution
@@ -328,6 +441,106 @@ describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
       channel: 'production',
       checked: false,
     })
+  })
+})
+
+describe('bundleCommandTestUtils.resolveExistingPublishedBundleCheck', () => {
+  test('loads an existing bundle for the selected release tuple', async () => {
+    const release = createRelease({
+      platform: 'android',
+      channel: 'staging',
+      runtimeVersion: '2.0.0',
+      bundleId: '2.0.0-web.1',
+    })
+    const check = await bundleCommandTestUtils.resolveExistingPublishedBundleCheck({
+      context: {
+        cwd: '/tmp/project',
+      },
+      options: {
+        channel: 'staging',
+      },
+      platform: 'android',
+      runtimeVersion: '2.0.0',
+      bundleId: '2.0.0-web.1',
+      loadExistingBundle: async input => {
+        expect(input).toEqual({
+          channel: 'staging',
+          platform: 'android',
+          runtimeVersion: '2.0.0',
+          bundleId: '2.0.0-web.1',
+        })
+
+        return release
+      },
+    })
+
+    expect(check).toEqual({
+      channel: 'staging',
+      checked: true,
+      release,
+    })
+  })
+
+  test('marks the duplicate lookup unavailable when it fails', async () => {
+    const check = await bundleCommandTestUtils.resolveExistingPublishedBundleCheck({
+      context: {
+        cwd: '/tmp/project',
+      },
+      options: {},
+      platform: 'ios',
+      runtimeVersion: '1.2.3',
+      bundleId: '1.2.3-web.1',
+      loadExistingBundle: async () => {
+        throw new Error('Network unavailable.')
+      },
+    })
+
+    expect(check).toEqual({
+      channel: 'production',
+      checked: false,
+    })
+  })
+})
+
+describe('bundleCommandTestUtils.assertNoExistingPublishedBundle', () => {
+  test('throws when the selected bundle ID already exists', () => {
+    expect(() => bundleCommandTestUtils.assertNoExistingPublishedBundle({
+      channel: 'production',
+      checked: true,
+      release: createRelease({
+        bundleId: '1.2.3-web.1',
+      }),
+    })).toThrow(
+      'Bundle ID "1.2.3-web.1" already exists for ios channel "production" and runtimeVersion "1.2.3".',
+    )
+  })
+
+  test('allows unavailable checks so bundle remains offline capable', () => {
+    expect(() => bundleCommandTestUtils.assertNoExistingPublishedBundle({
+      channel: 'production',
+      checked: false,
+    })).not.toThrow()
+  })
+})
+
+describe('bundleCommandTestUtils.findExistingPublishedBundle', () => {
+  test('matches bundle IDs only within the selected release tuple', () => {
+    expect(bundleCommandTestUtils.findExistingPublishedBundle({
+      releases: [
+        createRelease({
+          channel: 'staging',
+          bundleId: '1.2.3-web.1',
+        }),
+        createRelease({
+          channel: 'production',
+          bundleId: '1.2.3-web.2',
+        }),
+      ],
+      platform: 'ios',
+      channel: 'production',
+      runtimeVersion: '1.2.3',
+      bundleId: '1.2.3-web.1',
+    })).toBeUndefined()
   })
 })
 

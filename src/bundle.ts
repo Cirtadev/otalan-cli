@@ -46,6 +46,7 @@ type BundleOptions = {
   inputDir?: string
   platform: MobilePlatform
   target: Target
+  beforeWrite?: (manifest: BundleManifest) => Promise<void>
 }
 
 type BundleResult = {
@@ -741,6 +742,7 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
     platform: options.platform,
   }
 
+  await options.beforeWrite?.(manifest)
   await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
 
   return {
@@ -795,6 +797,7 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       platform: options.platform,
     }
 
+    await options.beforeWrite?.(manifest)
     await writeBundleOutput(options.outputDir, bundleArchive.bytes, manifest)
 
     return {
