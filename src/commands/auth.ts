@@ -57,14 +57,14 @@ async function resolveLoginInput(
   const apiKeysUrl = resolveApiKeysUrl()
 
   console.log('')
-  console.log(`Get your CI key from: ${apiKeysUrl}`)
+  console.log(`Get your OTA Publish Key from: ${apiKeysUrl}`)
 
   const apiKey = await prompt({
-    question: 'CI key',
+    question: 'OTA Publish Key',
     hint: [
-      'Project CI key for publish, rollback, status, and bundle listing. Do not use an OTA app key.',
-      stored?.apiKey ? `Current CI key: ${maskApiKey(stored.apiKey)}` : undefined,
-      stored?.apiKey ? 'Press Enter to keep the current CI key.' : undefined,
+      'Project OTA Publish Key for publish, rollback, status, and bundle listing. Do not use an OTA App Key.',
+      stored?.apiKey ? `Current OTA Publish Key: ${maskApiKey(stored.apiKey)}` : undefined,
+      stored?.apiKey ? 'Press Enter to keep the current OTA Publish Key.' : undefined,
     ].filter(Boolean).join('\n'),
     example: stored?.apiKey ? undefined : 'otalan_ci_xxxxxxxxx',
   })
@@ -135,7 +135,7 @@ export async function handleLogin(options: Record<string, string | boolean>) {
 
   if (context) {
     console.log('')
-    console.log(`Resolved CI key context: ${context.organizationSlug} / ${context.projectSlug}`)
+    console.log(`Resolved OTA Publish Key context: ${context.organizationSlug} / ${context.projectSlug}`)
   }
 
   console.log('')
@@ -178,7 +178,7 @@ export async function handleInit(context: CommandContext, options: Record<string
   } satisfies ProjectConfig)
 
   console.log('')
-  console.log(`Resolved CI key context: ${releaseContext.organizationSlug} / ${releaseContext.projectSlug}`)
+  console.log(`Resolved OTA Publish Key context: ${releaseContext.organizationSlug} / ${releaseContext.projectSlug}`)
   console.log(`Linked app: ${app ? formatAppOption(app) : appId}`)
 
   console.log('Created otalan.config.json.')

@@ -2,6 +2,12 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.3.4 - 2026-05-21
+
+### Changed
+
+- Rename user-facing key wording to OTA Publish Key and OTA App Key.
+
 ## 1.3.3 - 2026-05-18
 
 ### Changed
@@ -76,7 +82,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 
 ### Changed
 
-- Let `otalan login` reuse the saved API URL and keep the saved CI key from a masked prompt.
+- Let `otalan login` reuse the saved API URL and keep the saved OTA Publish Key from a masked prompt.
 - Export Expo bundles into a project-local `.otalan/expo-export-*` folder so Expo accepts the output path.
 - Fall back to the resolved app version when Expo runtimeVersion is not configured or present in export metadata.
 - Clarify Capacitor and Expo bundling behavior in CLI help and README.
@@ -102,7 +108,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 ### Changed
 
 - Clean public README examples to avoid project-specific app IDs, generated-looking slugs, and local development API URLs.
-- Keep user-facing login guidance pointed at the public Otalan API keys page.
+- Keep user-facing login guidance pointed at the public Otalan keys page.
 
 ## 1.0.6 - 2026-05-05
 
@@ -156,6 +162,6 @@ Initial public release of the Otalan CLI.
 - Expo OTA bundle packaging through `expo export`.
 - Release publishing with rollout metadata and server-side validation polling.
 - Bundle listing, active bundle status, and rollback commands.
-- CI key login, project initialization, and API connectivity doctor checks.
+- OTA Publish Key login, project initialization, and API connectivity doctor checks.
 - Runtime version resolution helpers.
 - Public npm package metadata, license notices, and Bun-based CLI entrypoint.

@@ -9,9 +9,9 @@ Published as an npm package, but the CLI itself runs on Bun.
 ## Requirements
 
 - Bun `>= 1.3.11` installed and available on your `PATH`
-- An Otalan **CI key** for commands that talk to the Otalan API
+- An Otalan **OTA Publish Key** for commands that talk to the Otalan API
 
-Do not use the OTA app key in the CLI.
+Do not use an OTA App Key in the CLI. OTA App Keys can be embedded in mobile app code for update checks, but they should not be shared outside the app or used for release automation.
 
 ## Platform Support
 
@@ -50,7 +50,7 @@ bun ./src/bin.ts help
 
 ### Capacitor
 
-1. Log in with your CI key:
+1. Log in with your OTA Publish Key:
 
 ```bash
 otalan login --api-key otalan_ci_xxx
@@ -81,7 +81,7 @@ otalan publish --channel production
 
 ### Expo
 
-1. Log in with your CI key:
+1. Log in with your OTA Publish Key:
 
 ```bash
 otalan login --api-key otalan_ci_xxx
@@ -110,11 +110,11 @@ otalan publish --channel production
 
 ## CI/CD Usage
 
-The CLI is designed to work well in CI/CD with a project-scoped Otalan CI key.
+The CLI is designed to work well in CI/CD with a project-scoped OTA Publish Key.
 
 Set these secrets in your CI provider:
 
-- `OTALAN_API_KEY`
+- `OTALAN_API_KEY` with your OTA Publish Key
 - `OTALAN_APP_ID` for an active app
 
 Optional:
@@ -187,8 +187,8 @@ Adjust the build step and bundle target for your app:
 ## What It Does
 
 - logs into the Otalan API
-- checks API connectivity and CI key context
-- generates CI and OTA key material locally for dashboard import
+- checks API connectivity and OTA Publish Key context
+- generates OTA Publish Key and OTA App Key material locally for dashboard import
 - links the current repo to an Otalan app
 - bundles Capacitor or Expo OTA output
 - publishes a bundle with rollout metadata
@@ -250,12 +250,12 @@ otalan keygen --kind ci
 otalan keygen --kind ota
 ```
 
-If `--kind` is omitted, the CLI prompts for `CI key (private)` or `OTA key (public)`.
+If `--kind` is omitted, the CLI prompts for `OTA Publish Key` or `OTA App Key`.
 
 Output includes both the full Otalan key and the base64url suffix without the `otalan_ci_` or `otalan_ota_` prefix:
 
 ```text
-Generated CI key.
+Generated OTA Publish Key.
 
 Full key:
 otalan_ci_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -264,13 +264,13 @@ Key without prefix:
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-`otalan keygen` only creates local key material. Importing or activating a key should still happen through an authenticated dashboard flow; an existing CI key should not be able to create more keys.
+`otalan keygen` only creates local key material. Importing or activating a key should still happen through an authenticated dashboard flow; an existing OTA Publish Key should not be able to create more keys. OTA App Keys are intended for embedded app update checks and should not be shared or used as CLI credentials.
 
 ### `otalan login`
 
-Saves the project CI key and API base URL locally.
+Saves the project OTA Publish Key and API base URL locally.
 
-If auth is already saved, `otalan login` shows the current API URL as the prompt default and shows the current CI key in masked form. Press Enter to keep either value.
+If auth is already saved, `otalan login` shows the current API URL as the prompt default and shows the current OTA Publish Key in masked form. Press Enter to keep either value.
 
 ```bash
 otalan login --api-key otalan_ci_xxx --api-url https://api.otalan.com
@@ -278,7 +278,7 @@ otalan login --api-key otalan_ci_xxx --api-url https://api.otalan.com
 
 ### `otalan doctor`
 
-Checks API connectivity and prints the organization/project context resolved from the configured CI key.
+Checks API connectivity and prints the organization/project context resolved from the configured OTA Publish Key.
 
 ```bash
 otalan doctor
@@ -294,7 +294,7 @@ otalan doctor --api-key "$OTALAN_API_KEY" --api-url "${OTALAN_API_URL:-https://a
 
 Creates `otalan.config.json` in the current project.
 
-`otalan init` lists the active apps in the project resolved from the logged-in CI key and lets you select one. `appId` is scoped to that project, not globally unique across all projects. Archived apps are not listed and are treated as unavailable for CI publish, rollback, status, and bundle listing commands.
+`otalan init` lists the active apps in the project resolved from the logged-in OTA Publish Key and lets you select one. `appId` is scoped to that project, not globally unique across all projects. Archived apps are not listed and are treated as unavailable for CI publish, rollback, status, and bundle listing commands.
 
 Run `otalan init` once per app repo or working folder. If you switch to another checkout, folder, or app project, run `otalan init` there too so that folder has its own `otalan.config.json`.
 
@@ -575,6 +575,6 @@ bun pm pack --dry-run
 - This is a Bun-based CLI published on npm.
 - Expo bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
-- Publishing, rollback, status, and `bundles` expect a CI key and an active app.
+- Publishing, rollback, status, and `bundles` expect an OTA Publish Key and an active app.
 - Bundle and release commands print the linked project and app before continuing when project config is available.
 - Run `bun run build` after changing CLI source if you want `dist/bin.js` updated locally.

@@ -14,7 +14,7 @@ const KEY_SUFFIX = KEY_BYTES.toString('base64url')
 // -----------------------------------------------------------------------------
 
 describe('generateOtalanKey', () => {
-  test('generates CI keys with the Otalan CI prefix and 24 base64url-encoded random bytes', () => {
+  test('generates OTA Publish Keys with the Otalan publish prefix and 24 base64url-encoded random bytes', () => {
     const key = generateOtalanKey('ci', KEY_BYTES)
 
     expect(key).toEqual({
@@ -26,7 +26,7 @@ describe('generateOtalanKey', () => {
     expect(key.suffix).toMatch(/^[A-Za-z0-9_-]{32}$/)
   })
 
-  test('generates OTA keys with the Otalan OTA prefix and 24 base64url-encoded random bytes', () => {
+  test('generates OTA App Keys with the Otalan OTA prefix and 24 base64url-encoded random bytes', () => {
     const key = generateOtalanKey('ota', KEY_BYTES)
 
     expect(key).toEqual({
@@ -67,7 +67,7 @@ describe('keygenCommandTestUtils.formatKeygenOutput', () => {
     const key = generateOtalanKey('ci', KEY_BYTES)
 
     expect(keygenCommandTestUtils.formatKeygenOutput(key)).toBe([
-      'Generated CI key.',
+      'Generated OTA Publish Key.',
       '',
       'Full key:',
       `otalan_ci_${KEY_SUFFIX}`,

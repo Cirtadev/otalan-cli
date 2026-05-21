@@ -22,7 +22,7 @@ afterEach(() => {
 // -----------------------------------------------------------------------------
 
 describe('handleDoctor', () => {
-  test('checks API connectivity and prints the CI key context', async () => {
+  test('checks API connectivity and prints the OTA Publish Key context', async () => {
     const events: string[] = []
 
     console.log = (...values: unknown[]) => {
@@ -140,7 +140,7 @@ describe('handleInit', () => {
 })
 
 describe('authCommandTestUtils', () => {
-  test('uses the default API URL without prompting when an API key is provided', async () => {
+  test('uses the default API URL without prompting when a key is provided', async () => {
     const prompts: string[] = []
 
     const input = await authCommandTestUtils.resolveLoginInput(
@@ -163,7 +163,7 @@ describe('authCommandTestUtils', () => {
     expect(prompts).toEqual([])
   })
 
-  test('uses the stored API URL without prompting when only the API key is provided', async () => {
+  test('uses the stored API URL without prompting when only the key is provided', async () => {
     const prompts: string[] = []
 
     const input = await authCommandTestUtils.resolveLoginInput(
@@ -187,7 +187,7 @@ describe('authCommandTestUtils', () => {
     expect(prompts).toEqual([])
   })
 
-  test('masks stored CI keys without exposing the full value', () => {
+  test('masks stored OTA Publish Keys without exposing the full value', () => {
     expect(authCommandTestUtils.maskApiKey('otalan_ci_1234567890abcdef')).toBe('otalan_ci_...cdef')
   })
 

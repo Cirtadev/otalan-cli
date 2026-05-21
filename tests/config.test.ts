@@ -24,7 +24,7 @@ afterEach(async () => {
 // -----------------------------------------------------------------------------
 
 describe('saveGlobalConfig', () => {
-  test('stores the CI key config with owner-only permissions', async () => {
+  test('stores the OTA Publish Key config with owner-only permissions', async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-config-'))
 
     tempDirs.push(homeDir)

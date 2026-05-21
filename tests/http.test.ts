@@ -102,7 +102,7 @@ function createArchiveBlob() {
 // -----------------------------------------------------------------------------
 
 describe('getReleaseContext', () => {
-  test('reads the authenticated CI key context', async () => {
+  test('reads the authenticated OTA Publish Key context', async () => {
     globalThis.fetch = (async (input, init) => {
       expect(String(input)).toBe('https://api.otalan.com/v1/releases/context')
       expect(init?.method).toBe('GET')
@@ -138,7 +138,7 @@ describe('getReleaseContext', () => {
 })
 
 describe('listReleaseApps', () => {
-  test('lists active apps in the authenticated CI project', async () => {
+  test('lists active apps in the authenticated publish-key project', async () => {
     globalThis.fetch = (async (input, init) => {
       expect(String(input)).toBe('https://api.otalan.com/v1/releases/apps')
       expect(init?.method).toBe('GET')
@@ -399,7 +399,7 @@ describe('resumeRelease', () => {
 })
 
 describe('release request errors', () => {
-  test('explains that archived apps are unavailable to CI release operations', async () => {
+  test('explains that archived apps are unavailable to release operations', async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({
         message: 'App not found in selected project',

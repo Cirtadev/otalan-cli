@@ -10,8 +10,8 @@ import { promptSelectWithHint } from '../cli/prompts'
 const KEY_BYTE_LENGTH = 24
 
 const KEY_KIND_OPTIONS = [
-  { label: 'CI key (private)', value: 'ci' },
-  { label: 'OTA key (public)', value: 'ota' },
+  { label: 'OTA Publish Key', value: 'ci' },
+  { label: 'OTA App Key', value: 'ota' },
 ] as const satisfies ReadonlyArray<{ label: string, value: KeyKind }>
 
 // -----------------------------------------------------------------------------
@@ -60,12 +60,12 @@ export function generateOtalanKey(kind: KeyKind, bytes = randomBytes(KEY_BYTE_LE
 }
 
 function formatKeyKindLabel(kind: KeyKind) {
-  return kind === 'ci' ? 'CI' : 'OTA'
+  return kind === 'ci' ? 'OTA Publish Key' : 'OTA App Key'
 }
 
 function formatKeygenOutput(key: GeneratedOtalanKey) {
   return [
-    `Generated ${formatKeyKindLabel(key.kind)} key.`,
+    `Generated ${formatKeyKindLabel(key.kind)}.`,
     '',
     'Full key:',
     key.fullKey,
@@ -84,7 +84,7 @@ export async function handleKeygen(options: Record<string, string | boolean>) {
   const kindInput = kindOption ?? await promptSelectWithHint({
     question: 'Key kind',
     fallback: 'ci',
-    hint: 'Generate a local Otalan key. Use CI for private automation secrets or OTA for app update checks.',
+    hint: 'Generate a local Otalan key. Use OTA Publish Keys for private release automation or OTA App Keys for embedded app update checks.',
     options: KEY_KIND_OPTIONS,
   })
   const key = generateOtalanKey(resolveKeyKind(kindInput))

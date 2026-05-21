@@ -36,7 +36,7 @@ export async function resolveApiConfig(options: Record<string, string | boolean>
   const apiUrl = readStringOption(options, 'api-url') ?? stored?.apiUrl ?? 'https://api.otalan.com'
 
   if (!apiKey) {
-    throw new Error('No API key configured. Run `otalan login` first or pass --api-key.')
+    throw new Error('No OTA Publish Key configured. Run `otalan login` first or pass --api-key.')
   }
 
   return {
@@ -58,13 +58,13 @@ export async function assertReleaseContextMatchesConfig(input: {
 
   if (input.organizationSlug && input.organizationSlug !== context.organizationSlug) {
     throw new Error(
-      `Configured organization slug "${input.organizationSlug}" does not match CI key organization "${context.organizationSlug}".`,
+      `Configured organization slug "${input.organizationSlug}" does not match OTA Publish Key organization "${context.organizationSlug}".`,
     )
   }
 
   if (input.projectSlug && input.projectSlug !== context.projectSlug) {
     throw new Error(
-      `Configured project slug "${input.projectSlug}" does not match CI key project "${context.projectSlug}".`,
+      `Configured project slug "${input.projectSlug}" does not match OTA Publish Key project "${context.projectSlug}".`,
     )
   }
 

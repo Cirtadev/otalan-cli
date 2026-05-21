@@ -67,9 +67,9 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
   const commands = [
     ['help', '', 'Show help.'],
     ['version', '', 'Show CLI version.'],
-    ['login', '[--api-key ...] [--api-url ...]', 'Save project CI key auth locally.'],
+    ['login', '[--api-key ...] [--api-url ...]', 'Save project OTA Publish Key auth locally.'],
     ['init', '[--app-id ...]', 'Select and link this repo to an active app.'],
-    ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and CI key context.'],
+    ['doctor', '[--api-key ...] [--api-url ...]', 'Check API connectivity and OTA Publish Key context.'],
     ['keygen', '[--kind ci|ota]', 'Generate an Otalan key locally without calling the API.'],
     ['bundle', '[--target capacitor|expo] [--platform ios|android]', 'Build bundle-<bundle-id>.zip and manifest.json for Capacitor or Expo apps.'],
     ['', '[--input-dir path] [--output-dir .otalan/bundle]', ''],
