@@ -6,7 +6,7 @@ All notable changes to `@otalan/cli` will be documented in this file.
 
 ### Changed
 
-- Rename user-facing key wording to OTA Publish Key and OTA App Key.
+- Rename user-facing key wording to OTA Publish Key and OTA App Key, while documenting the existing `otalan_ci_` and `otalan_ota_` internal prefixes.
 
 ## 1.3.3 - 2026-05-18
 

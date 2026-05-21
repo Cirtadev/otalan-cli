@@ -11,6 +11,11 @@ Published as an npm package, but the CLI itself runs on Bun.
 - Bun `>= 1.3.11` installed and available on your `PATH`
 - An Otalan **OTA Publish Key** for commands that talk to the Otalan API
 
+Otalan key prefixes are stable API identifiers:
+
+- **OTA Publish Key** values use the `otalan_ci_` prefix internally.
+- **OTA App Key** values use the `otalan_ota_` prefix internally.
+
 Do not use an OTA App Key in the CLI. OTA App Keys can be embedded in mobile app code for update checks, but they should not be shared outside the app or used for release automation.
 
 ## Platform Support
@@ -251,6 +256,11 @@ otalan keygen --kind ota
 ```
 
 If `--kind` is omitted, the CLI prompts for `OTA Publish Key` or `OTA App Key`.
+
+The `--kind` values and generated key prefixes keep the existing internal API identifiers:
+
+- `--kind ci` generates an OTA Publish Key with the `otalan_ci_` prefix.
+- `--kind ota` generates an OTA App Key with the `otalan_ota_` prefix.
 
 Output includes both the full Otalan key and the base64url suffix without the `otalan_ci_` or `otalan_ota_` prefix:
 
