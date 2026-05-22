@@ -504,6 +504,10 @@ describe('handlePublish', () => {
           }),
           uploadUrl: 'https://upload.example.test/quarantine.zip',
           contentType: 'application/zip',
+          uploadHeaders: {
+            'Content-Type': 'application/zip',
+            'Content-Length': '9',
+          },
         }), {
           status: 202,
           headers: {
@@ -516,6 +520,7 @@ describe('handlePublish', () => {
         expect(init?.method).toBe('PUT')
         expect(init?.headers).toEqual({
           'Content-Type': 'application/zip',
+          'Content-Length': '9',
         })
         const uploadBody = init?.body as Blob
 
@@ -633,6 +638,10 @@ describe('handlePublish', () => {
           }),
           uploadUrl: 'https://upload.example.test/quarantine.zip',
           contentType: 'application/zip',
+          uploadHeaders: {
+            'Content-Type': 'application/zip',
+            'Content-Length': '9',
+          },
         }), {
           status: 202,
           headers: {
@@ -642,6 +651,11 @@ describe('handlePublish', () => {
       }
 
       if (url.href === 'https://upload.example.test/quarantine.zip') {
+        expect(init?.headers).toEqual({
+          'Content-Type': 'application/zip',
+          'Content-Length': '9',
+        })
+
         return new Response('<Error>Access Denied</Error>', {
           status: 403,
         })

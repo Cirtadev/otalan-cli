@@ -88,6 +88,8 @@ type ReleaseArchiveMetadata = {
   expoManifest?: string
 }
 
+type StorageUploadHeaders = Record<string, string>
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -166,6 +168,16 @@ async function assertDirectUploadResponseOk(response: Response) {
   throw new Error(message)
 }
 
+function assertRequiredStorageUploadHeaders(uploadHeaders: StorageUploadHeaders) {
+  const headers = new Headers(uploadHeaders)
+  const contentType = headers.get('Content-Type')?.trim()
+  const contentLength = headers.get('Content-Length')?.trim()
+
+  if (!contentType || !contentLength) {
+    throw new Error('Upload intent is missing required storage upload headers')
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
@@ -177,6 +189,7 @@ export async function createReleaseUploadIntent(
     item: BundleIngestItem
     uploadUrl: string
     contentType: string
+    uploadHeaders: StorageUploadHeaders
   }>({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
@@ -204,13 +217,13 @@ export async function createReleaseUploadIntent(
 export async function uploadReleaseArchive(input: {
   uploadUrl: string
   archive: Blob
-  contentType: string
+  uploadHeaders: StorageUploadHeaders
 }) {
+  assertRequiredStorageUploadHeaders(input.uploadHeaders)
+
   const response = await fetch(input.uploadUrl, {
     method: 'PUT',
-    headers: {
-      'Content-Type': input.contentType,
-    },
+    headers: input.uploadHeaders,
     body: input.archive,
   })
 

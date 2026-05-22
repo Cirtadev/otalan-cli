@@ -453,7 +453,7 @@ otalan publish --channel production --optional
 This uses the direct-upload release flow:
 
 1. `POST /v1/releases/create` with JSON metadata for the release and local ZIP, including `expoManifest` for Expo bundles
-2. `PUT` the ZIP bytes directly to the returned opaque `uploadUrl` with the exact returned `Content-Type`
+2. `PUT` the ZIP bytes directly to the returned opaque `uploadUrl` with the exact returned `uploadHeaders`, including `Content-Length`
 3. `POST /v1/releases/ingests/:id/complete`
 4. poll `GET /v1/releases/ingests/:id` until the ingest reaches `ready` or `failed`
 

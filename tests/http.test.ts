@@ -208,6 +208,10 @@ describe('createReleaseUploadIntent', () => {
         }),
         uploadUrl: 'https://upload.example.test/quarantine.zip',
         contentType: 'application/zip',
+        uploadHeaders: {
+          'Content-Type': 'application/zip',
+          'Content-Length': '9',
+        },
       }), {
         status: 202,
         headers: {
@@ -238,6 +242,10 @@ describe('createReleaseUploadIntent', () => {
     expect(intent.item.releaseNotes).toBe('Fixes startup crash')
     expect(intent.uploadUrl).toBe('https://upload.example.test/quarantine.zip')
     expect(intent.contentType).toBe('application/zip')
+    expect(intent.uploadHeaders).toEqual({
+      'Content-Type': 'application/zip',
+      'Content-Length': '9',
+    })
     expect(typeof requestBody).toBe('string')
     expect(JSON.parse(requestBody as string)).toEqual({
       appId: 'com.example.app',
@@ -265,6 +273,7 @@ describe('uploadReleaseArchive', () => {
       expect(init?.method).toBe('PUT')
       expect(init?.headers).toEqual({
         'Content-Type': 'application/zip',
+        'Content-Length': '9',
       })
       expect(init?.body).toBe(archive)
       expect(await new Response(init?.body as BodyInit).text()).toBe('zip-bytes')
@@ -277,8 +286,27 @@ describe('uploadReleaseArchive', () => {
     await uploadReleaseArchive({
       uploadUrl: 'https://upload.example.test/quarantine.zip',
       archive,
-      contentType: 'application/zip',
+      uploadHeaders: {
+        'Content-Type': 'application/zip',
+        'Content-Length': '9',
+      },
     })
+  })
+
+  test('requires storage upload headers before direct upload', async () => {
+    const failFetch = async () => {
+      throw new Error('Direct upload should not start')
+    }
+
+    globalThis.fetch = failFetch as unknown as typeof fetch
+
+    await expect(uploadReleaseArchive({
+      uploadUrl: 'https://upload.example.test/quarantine.zip',
+      archive: createArchiveBlob(),
+      uploadHeaders: {
+        'Content-Type': 'application/zip',
+      },
+    })).rejects.toThrow('Upload intent is missing required storage upload headers')
   })
 })
 

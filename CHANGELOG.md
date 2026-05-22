@@ -2,6 +2,12 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.4.0 - 2026-05-22
+
+### Changed
+
+- Send direct object-storage uploads with the API-provided `uploadHeaders`, including explicit `Content-Length`.
+
 ## 1.3.4 - 2026-05-21
 
 ### Changed

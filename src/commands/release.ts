@@ -292,7 +292,7 @@ export async function handlePublish(
     await uploadReleaseArchive({
       uploadUrl: uploadIntent.uploadUrl,
       archive: archive.body,
-      contentType: uploadIntent.contentType,
+      uploadHeaders: uploadIntent.uploadHeaders,
     })
   } catch (error) {
     await cancelReleaseUpload({
