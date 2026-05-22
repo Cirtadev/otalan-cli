@@ -362,6 +362,8 @@ Runtime version defaults:
 - Expo runtimeVersion reads `--runtime-version`, Expo export metadata, or Expo config runtimeVersion policies/strings; if none are present, the CLI falls back to the selected platform Expo `version`
 - `--runtime-version` overrides auto-detection
 
+Native project file parsing is best-effort. If your `Info.plist`, Xcode build settings, or Gradle files use patterns the CLI cannot read, pass `--runtime-version` explicitly.
+
 For Expo projects, the recommended app config is:
 
 ```json
@@ -429,6 +431,7 @@ Current behavior:
 - `--release-notes` attaches release notes to the published bundle
 - Expo publish forwards the full generated Otalan satellite manifest when present
 - Expo publish sends the generated manifest with `runtimeVersion`
+- Expo manifests include the Expo config captured from `bunx expo config --json`; avoid placing secrets in Expo config fields that are not intended to be uploaded
 - Otalan validates the release ZIP before the publish completes
 - active rollouts can be paused and resumed later without changing the selected bundle
 

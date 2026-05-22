@@ -12,9 +12,10 @@ const PROJECT_ROOT = path.resolve(import.meta.dir, '..')
 // CLI help
 // -----------------------------------------------------------------------------
 
-async function runCli(args: string[]) {
+async function runCli(args: string[], options: { env?: Record<string, string> } = {}) {
   const proc = Bun.spawn(['bun', './src/bin.ts', ...args], {
     cwd: PROJECT_ROOT,
+    ...(options.env ? { env: { ...process.env, ...options.env }} : {}),
     stdout: 'pipe',
     stderr: 'pipe',
   })
@@ -90,6 +91,18 @@ describe('CLI help', () => {
     expect(result.exitCode).toBe(1)
     expect(result.stdout).toBe('')
     expect(result.stderr).toContain('Unknown command: upload')
+  })
+
+  test('debug mode prints stack traces for command errors', async () => {
+    const result = await runCli(['upload'], {
+      env: {
+        OTALAN_DEBUG: '1',
+      },
+    })
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('Error: Unknown command: upload')
+    expect(result.stderr).toContain('at main')
   })
 
   test('login --help prints help text without triggering login prompts', async () => {

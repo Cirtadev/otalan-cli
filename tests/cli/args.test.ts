@@ -36,6 +36,23 @@ describe('parseArgs', () => {
       v: true,
     })
   })
+
+  test('parses long options with equals values', () => {
+    const parsed = parseArgs([
+      'publish',
+      '--release-notes=-fix startup issue',
+      '--channel=production',
+    ])
+
+    expect(parsed).toEqual({
+      command: 'publish',
+      subcommand: undefined,
+      options: {
+        'release-notes': '-fix startup issue',
+        channel: 'production',
+      },
+    })
+  })
 })
 
 // -----------------------------------------------------------------------------

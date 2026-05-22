@@ -32,6 +32,7 @@ export type PromptSelectOption<T extends string> = {
 
 export type PromptWithHintInput = PromptHintInput & {
   fallback?: string
+  secret?: boolean
 }
 
 export type PromptSelectWithHintInput<T extends string> = PromptHintInput & {
@@ -43,7 +44,69 @@ export type PromptSelectWithHintInput<T extends string> = PromptHintInput & {
 // Text prompt helpers
 // -----------------------------------------------------------------------------
 
-async function prompt(question: string, fallback?: string) {
+type Keypress = {
+  ctrl?: boolean
+  name?: string
+}
+
+async function promptSecret(question: string, fallback?: string) {
+  if (!input.isTTY || !output.isTTY) {
+    return promptText(question, fallback)
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    let answer = ''
+    const message = fallback ? `${question} (${fallback}): ` : `${question}: `
+    const previousRawMode = input.isRaw
+
+    const cleanup = () => {
+      input.off('keypress', onKeypress)
+      input.setRawMode(previousRawMode)
+      input.pause()
+    }
+
+    const finish = () => {
+      cleanup()
+      output.write('\n')
+      resolve(answer.trim() || fallback || '')
+    }
+
+    const cancel = () => {
+      cleanup()
+      output.write('\n')
+      reject(new Error('Prompt cancelled.'))
+    }
+
+    const onKeypress = (text: string, key: Keypress) => {
+      if (key.ctrl && key.name === 'c') {
+        cancel()
+        return
+      }
+
+      if (key.name === 'return' || key.name === 'enter') {
+        finish()
+        return
+      }
+
+      if (key.name === 'backspace' || key.name === 'delete') {
+        answer = answer.slice(0, -1)
+        return
+      }
+
+      if (!key.ctrl && text) {
+        answer += text
+      }
+    }
+
+    output.write(message)
+    emitKeypressEvents(input)
+    input.setRawMode(true)
+    input.resume()
+    input.on('keypress', onKeypress)
+  })
+}
+
+async function promptText(question: string, fallback?: string) {
   const rl = readline.createInterface({ input, output })
 
   try {
@@ -53,6 +116,12 @@ async function prompt(question: string, fallback?: string) {
   } finally {
     rl.close()
   }
+}
+
+async function prompt(question: string, fallback?: string, options: { secret?: boolean } = {}) {
+  return options.secret
+    ? promptSecret(question, fallback)
+    : promptText(question, fallback)
 }
 
 function printHint(inputValue: PromptHintInput) {
@@ -66,7 +135,9 @@ function printHint(inputValue: PromptHintInput) {
 
 export async function promptWithHint(input: PromptWithHintInput) {
   printHint(input)
-  return prompt(input.question, input.fallback)
+  return prompt(input.question, input.fallback, {
+    secret: input.secret,
+  })
 }
 
 // -----------------------------------------------------------------------------
@@ -189,7 +260,7 @@ async function promptSelect<T extends string>(
       reject(new Error('Prompt cancelled.'))
     }
 
-    const onKeypress = (_text: string, key: { ctrl?: boolean, name?: string }) => {
+    const onKeypress = (_text: string, key: Keypress) => {
       if (key.ctrl && key.name === 'c') {
         cancel()
         return

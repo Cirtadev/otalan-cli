@@ -228,7 +228,15 @@ export function formatIngestSummary(input: {
 }
 
 function formatCell(value: string, width: number) {
-  return value.length >= width ? value.slice(0, width) : value.padEnd(width, ' ')
+  if (value.length <= width) {
+    return value.padEnd(width, ' ')
+  }
+
+  if (width <= 1) {
+    return '…'
+  }
+
+  return `${value.slice(0, width - 1)}…`
 }
 
 // -----------------------------------------------------------------------------

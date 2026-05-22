@@ -47,6 +47,7 @@ type PublishedBundleHint = {
 type ExistingPublishedBundleCheck = {
   channel: string
   checked: boolean
+  unavailableReason?: string
   release?: ReleaseItem
 }
 
@@ -351,10 +352,11 @@ async function resolveExistingPublishedBundleCheck(input: {
         bundleId: input.bundleId,
       }),
     }
-  } catch {
+  } catch (error) {
     return {
       channel,
       checked: false,
+      unavailableReason: error instanceof Error ? error.message : String(error),
     }
   }
 }
@@ -368,6 +370,30 @@ function assertNoExistingPublishedBundle(input: ExistingPublishedBundleCheck) {
     `Bundle ID "${input.release.bundleId}" already exists for ${input.release.platform} `
     + `channel "${input.release.channel}" and runtimeVersion "${input.release.runtimeVersion}". `
     + 'Choose a new bundle ID before running `otalan bundle`.',
+  )
+}
+
+function warnUnavailableExistingPublishedBundleCheck(input: {
+  check: ExistingPublishedBundleCheck
+  platform: MobilePlatform
+  runtimeVersion: string
+  bundleId: string
+}) {
+  if (input.check.checked) {
+    return
+  }
+
+  if (
+    input.check.unavailableReason?.startsWith('No OTA Publish Key configured.')
+    || input.check.unavailableReason?.startsWith('Missing otalan.config.json.')
+  ) {
+    return
+  }
+
+  console.warn(
+    `Unable to verify whether bundle ID "${input.bundleId}" already exists for ${input.platform} `
+    + `channel "${input.check.channel}" and runtimeVersion "${input.runtimeVersion}". `
+    + 'Continuing without the duplicate-bundle guardrail.',
   )
 }
 
@@ -460,6 +486,12 @@ export async function handleBundle(context: CommandContext, options: Record<stri
         bundleId: manifest.bundleId,
       })
 
+      warnUnavailableExistingPublishedBundleCheck({
+        check: existingBundleCheck,
+        platform: manifest.platform,
+        runtimeVersion: manifest.runtimeVersion,
+        bundleId: manifest.bundleId,
+      })
       assertNoExistingPublishedBundle(existingBundleCheck)
     },
   })
@@ -488,4 +520,5 @@ export const bundleCommandTestUtils = {
   resolveExistingPublishedBundleCheck,
   resolvePublishedBundleIdFromReleases,
   resolvePublishedBundleHint,
+  warnUnavailableExistingPublishedBundleCheck,
 }

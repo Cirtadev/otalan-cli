@@ -308,6 +308,23 @@ describe('uploadReleaseArchive', () => {
       },
     })).rejects.toThrow('Upload intent is missing required storage upload headers')
   })
+
+  test('rejects non-HTTPS upload URLs outside local development', async () => {
+    const failFetch = async () => {
+      throw new Error('Direct upload should not start')
+    }
+
+    globalThis.fetch = failFetch as unknown as typeof fetch
+
+    await expect(uploadReleaseArchive({
+      uploadUrl: 'http://upload.example.test/quarantine.zip',
+      archive: createArchiveBlob(),
+      uploadHeaders: {
+        'Content-Type': 'application/zip',
+        'Content-Length': '9',
+      },
+    })).rejects.toThrow('Refusing to upload bundle over non-HTTPS URL.')
+  })
 })
 
 describe('completeReleaseUpload', () => {
@@ -445,5 +462,46 @@ describe('release request errors', () => {
     })).rejects.toThrow(
       'App not found in selected project. Check that appId is correct and the app is not archived.',
     )
+  })
+
+  test('includes non-JSON response bodies in API errors', async () => {
+    globalThis.fetch = (async () =>
+      new Response('Bad gateway from edge', {
+        status: 502,
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+      })) as unknown as typeof fetch
+
+    await expect(listReleases({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      appId: 'com.example.app',
+    })).rejects.toThrow('Request failed with status 502: Bad gateway from edge')
+  })
+
+  test('preserves empty query-string values', async () => {
+    globalThis.fetch = (async (input) => {
+      const url = new URL(String(input))
+
+      expect(url.searchParams.has('channel')).toBe(true)
+      expect(url.searchParams.get('channel')).toBe('')
+
+      return new Response(JSON.stringify({
+        items: [],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }) as typeof fetch
+
+    await expect(listReleases({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      appId: 'com.example.app',
+      channel: '',
+    })).resolves.toEqual([])
   })
 })

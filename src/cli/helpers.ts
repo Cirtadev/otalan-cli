@@ -26,8 +26,22 @@ export type BundleArchive = {
   body: Blob
 }
 
-export function resolveApiKeysUrl() {
-  return 'https://otalan.com/api-keys'
+export function resolveApiKeysUrl(apiUrl = 'https://api.otalan.com') {
+  const url = new URL(apiUrl)
+
+  if (url.hostname === 'api.otalan.com') {
+    return 'https://otalan.com/api-keys'
+  }
+
+  if (url.hostname.startsWith('api.')) {
+    url.hostname = url.hostname.slice(4)
+  }
+
+  url.pathname = '/api-keys'
+  url.search = ''
+  url.hash = ''
+
+  return url.toString()
 }
 
 export async function resolveApiConfig(options: Record<string, string | boolean>) {

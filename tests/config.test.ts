@@ -40,8 +40,10 @@ describe('saveGlobalConfig', () => {
       return
     }
 
+    const configDirStat = await stat(path.join(homeDir, '.otalan'))
     const configStat = await stat(path.join(homeDir, '.otalan', 'config.json'))
 
+    expect(configDirStat.mode & 0o777).toBe(0o700)
     expect(configStat.mode & 0o777).toBe(0o600)
   })
 })

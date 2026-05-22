@@ -20,6 +20,8 @@ import { promptSelectWithHint, promptWithHint, type PromptWithHintInput } from '
 
 type TextPrompt = (input: PromptWithHintInput) => Promise<string>
 type GlobalConfigLoader = () => Promise<GlobalConfig>
+type ReleaseContextLoader = typeof getReleaseContext
+type GlobalConfigSaver = typeof saveGlobalConfig
 
 function maskApiKey(apiKey: string) {
   const trimmed = apiKey.trim()
@@ -54,13 +56,14 @@ async function resolveLoginInput(
     hint: 'API base URL. Press Enter to keep the current value.',
   })
 
-  const apiKeysUrl = resolveApiKeysUrl()
+  const apiKeysUrl = resolveApiKeysUrl(apiUrl)
 
   console.log('')
   console.log(`Get your OTA Publish Key from: ${apiKeysUrl}`)
 
   const apiKey = await prompt({
     question: 'OTA Publish Key',
+    secret: true,
     hint: [
       'Project OTA Publish Key for publish, rollback, status, and bundle listing. Do not use an OTA App Key.',
       stored?.apiKey ? `Current OTA Publish Key: ${maskApiKey(stored.apiKey)}` : undefined,
@@ -116,27 +119,40 @@ async function resolveInitAppId(input: {
   })
 }
 
+async function validateAndSaveLogin(input: {
+  apiKey: string
+  apiUrl: string
+  loadContext?: ReleaseContextLoader
+  saveConfig?: GlobalConfigSaver
+}) {
+  const loadContext = input.loadContext ?? getReleaseContext
+  const saveConfig = input.saveConfig ?? saveGlobalConfig
+  const context = await loadContext({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+  })
+
+  await saveConfig({
+    apiKey: input.apiKey,
+    apiUrl: input.apiUrl,
+  })
+
+  return context
+}
+
 // -----------------------------------------------------------------------------
 // Commands
 // -----------------------------------------------------------------------------
 
 export async function handleLogin(options: Record<string, string | boolean>) {
   const { apiKey, apiUrl } = await resolveLoginInput(options)
-
-  await saveGlobalConfig({
-    apiKey,
+  const context = await validateAndSaveLogin({
     apiUrl,
+    apiKey,
   })
 
-  const context = await getReleaseContext({
-    apiUrl,
-    apiKey,
-  }).catch(() => null)
-
-  if (context) {
-    console.log('')
-    console.log(`Resolved OTA Publish Key context: ${context.organizationSlug} / ${context.projectSlug}`)
-  }
+  console.log('')
+  console.log(`Resolved OTA Publish Key context: ${context.organizationSlug} / ${context.projectSlug}`)
 
   console.log('')
   console.log('Saved CLI auth.')
@@ -190,4 +206,5 @@ export const authCommandTestUtils = {
   maskApiKey,
   resolveInitAppId,
   resolveLoginInput,
+  validateAndSaveLogin,
 }

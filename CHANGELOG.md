@@ -2,6 +2,14 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.4.1 - 2026-05-22
+
+### Changed
+
+- Hide interactive OTA Publish Key input during `otalan login` and validate credentials before saving them.
+- Surface skipped duplicate-bundle checks, non-JSON API error bodies, and truncated bundle table cells more clearly.
+- Harden direct uploads, argument parsing, global config permissions, Expo CLI resolution, and Expo runtime metadata scanning.
+
 ## 1.4.0 - 2026-05-22
 
 ### Changed

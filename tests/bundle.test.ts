@@ -8,6 +8,15 @@ import { unzipSync } from 'fflate'
 import { bundleProject, bundleTestUtils } from '../src/bundle'
 
 // -----------------------------------------------------------------------------
+// Fixtures
+// -----------------------------------------------------------------------------
+
+async function createLocalExpoCli(cwd: string) {
+  await mkdir(path.join(cwd, 'node_modules', 'expo'), { recursive: true })
+  await Bun.write(path.join(cwd, 'node_modules', 'expo', 'package.json'), '{"name":"expo"}\n')
+}
+
+// -----------------------------------------------------------------------------
 // bundle IDs
 // -----------------------------------------------------------------------------
 
@@ -304,6 +313,8 @@ describe('bundleProject', () => {
     }
 
     try {
+      await createLocalExpoCli(rootDir)
+
       bunWithSpawn.spawn = ((command: string[]) => {
         const outputDirIndex = command.indexOf('--output-dir')
 
@@ -380,6 +391,8 @@ describe('bundleProject', () => {
     }
 
     try {
+      await createLocalExpoCli(rootDir)
+
       bunWithSpawn.spawn = ((command: string[]) => {
         const outputDirIndex = command.indexOf('--output-dir')
 
@@ -522,6 +535,37 @@ describe('bundleTestUtils.findRuntimeVersionInObject', () => {
         ],
       },
     })).toBe('3.4.5')
+  })
+
+  test('stops before deeply nested metadata can exhaust the stack', () => {
+    let value: Record<string, unknown> = {
+      runtimeVersion: 'too-deep',
+    }
+
+    for (let index = 0; index < 40; index += 1) {
+      value = {
+        nested: value,
+      }
+    }
+
+    expect(bundleTestUtils.findRuntimeVersionInObject(value)).toBeUndefined()
+  })
+})
+
+describe('bundleProject Expo CLI validation', () => {
+  test('requires a local Expo CLI package before running bunx expo', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-expo-project-'))
+
+    try {
+      await expect(bundleProject({
+        cwd: rootDir,
+        outputDir: path.join(rootDir, '.otalan', 'bundle'),
+        platform: 'ios',
+        target: 'expo',
+      })).rejects.toThrow('Expo CLI is required for Expo bundles.')
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
   })
 })
 

@@ -13,10 +13,12 @@ import type { ReleaseItem } from '../../src/http'
 
 const originalFetch = globalThis.fetch
 const originalConsoleLog = console.log
+const originalConsoleWarn = console.warn
 
 afterEach(() => {
   globalThis.fetch = originalFetch
   console.log = originalConsoleLog
+  console.warn = originalConsoleWarn
 })
 
 // -----------------------------------------------------------------------------
@@ -97,6 +99,7 @@ describe('handleBundle', () => {
       console.log = (...args: unknown[]) => {
         output.push(args.map(String).join(' '))
       }
+      console.warn = () => {}
       globalThis.fetch = (async () => {
         throw new Error('Network unavailable.')
       }) as unknown as typeof fetch
@@ -538,6 +541,7 @@ describe('bundleCommandTestUtils.resolveExistingPublishedBundleCheck', () => {
     expect(check).toEqual({
       channel: 'production',
       checked: false,
+      unavailableReason: 'Network unavailable.',
     })
   })
 })
@@ -560,6 +564,51 @@ describe('bundleCommandTestUtils.assertNoExistingPublishedBundle', () => {
       channel: 'production',
       checked: false,
     })).not.toThrow()
+  })
+})
+
+describe('bundleCommandTestUtils.warnUnavailableExistingPublishedBundleCheck', () => {
+  test('warns when the duplicate-bundle check could not run', () => {
+    const warnings: string[] = []
+
+    console.warn = (...values: unknown[]) => {
+      warnings.push(values.map(String).join(' '))
+    }
+
+    bundleCommandTestUtils.warnUnavailableExistingPublishedBundleCheck({
+      check: {
+        channel: 'production',
+        checked: false,
+      },
+      platform: 'ios',
+      runtimeVersion: '1.2.3',
+      bundleId: '1.2.3-web.1',
+    })
+
+    expect(warnings).toEqual([
+      'Unable to verify whether bundle ID "1.2.3-web.1" already exists for ios channel "production" and runtimeVersion "1.2.3". Continuing without the duplicate-bundle guardrail.',
+    ])
+  })
+
+  test('does not warn when auth has not been configured', () => {
+    const warnings: string[] = []
+
+    console.warn = (...values: unknown[]) => {
+      warnings.push(values.map(String).join(' '))
+    }
+
+    bundleCommandTestUtils.warnUnavailableExistingPublishedBundleCheck({
+      check: {
+        channel: 'production',
+        checked: false,
+        unavailableReason: 'No OTA Publish Key configured. Run `otalan login` first or pass --api-key.',
+      },
+      platform: 'ios',
+      runtimeVersion: '1.2.3',
+      bundleId: '1.2.3-web.1',
+    })
+
+    expect(warnings).toEqual([])
   })
 })
 

@@ -21,7 +21,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
 
     if (token.startsWith('--')) {
-      const key = token.slice(2)
+      const option = token.slice(2)
+      const separatorIndex = option.indexOf('=')
+
+      if (separatorIndex !== -1) {
+        const key = option.slice(0, separatorIndex)
+        options[key] = option.slice(separatorIndex + 1)
+        continue
+      }
+
+      const key = option
       const next = rest[index + 1]
 
       if (!next || next.startsWith('-')) {

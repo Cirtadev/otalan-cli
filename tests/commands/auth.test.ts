@@ -187,6 +187,91 @@ describe('authCommandTestUtils', () => {
     expect(prompts).toEqual([])
   })
 
+  test('marks the interactive OTA Publish Key prompt as secret', async () => {
+    const prompts: Array<{ question: string, secret?: boolean }> = []
+
+    const input = await authCommandTestUtils.resolveLoginInput(
+      {},
+      async prompt => {
+        prompts.push({
+          question: prompt.question,
+          secret: prompt.secret,
+        })
+
+        return prompt.question === 'Otalan API URL'
+          ? 'https://api.otalan.com'
+          : 'test-key'
+      },
+      async () => {
+        throw new Error('No stored config.')
+      },
+    )
+
+    expect(input).toEqual({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+    })
+    expect(prompts).toEqual([
+      {
+        question: 'Otalan API URL',
+        secret: undefined,
+      },
+      {
+        question: 'OTA Publish Key',
+        secret: true,
+      },
+    ])
+  })
+
+  test('validates login credentials before saving them', async () => {
+    const events: string[] = []
+
+    const context = await authCommandTestUtils.validateAndSaveLogin({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      loadContext: async input => {
+        events.push(`validate:${input.apiKey}`)
+        return {
+          organizationId: 'org-123',
+          organizationName: 'Test Org',
+          organizationSlug: 'test-org',
+          projectId: 'project-123',
+          projectName: 'Test Project',
+          projectSlug: 'test-project',
+        }
+      },
+      saveConfig: async input => {
+        events.push(`save:${input.apiKey}`)
+      },
+    })
+
+    expect(context.organizationSlug).toBe('test-org')
+    expect(events).toEqual([
+      'validate:test-key',
+      'save:test-key',
+    ])
+  })
+
+  test('does not save login credentials when validation fails', async () => {
+    const events: string[] = []
+
+    await expect(authCommandTestUtils.validateAndSaveLogin({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'revoked-key',
+      loadContext: async input => {
+        events.push(`validate:${input.apiKey}`)
+        throw new Error('Invalid OTA Publish Key.')
+      },
+      saveConfig: async input => {
+        events.push(`save:${input.apiKey}`)
+      },
+    })).rejects.toThrow('Invalid OTA Publish Key.')
+
+    expect(events).toEqual([
+      'validate:revoked-key',
+    ])
+  })
+
   test('masks stored OTA Publish Keys without exposing the full value', () => {
     expect(authCommandTestUtils.maskApiKey('otalan_ci_1234567890abcdef')).toBe('otalan_ci_...cdef')
   })

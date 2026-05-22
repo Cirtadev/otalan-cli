@@ -104,6 +104,16 @@ async function main() {
   }
 }
 
+function formatFatalError(error: unknown) {
+  if (error instanceof Error) {
+    return process.env.OTALAN_DEBUG === '1'
+      ? error.stack ?? error.message
+      : error.message
+  }
+
+  return error
+}
+
 // -----------------------------------------------------------------------------
 // Process bootstrap
 // -----------------------------------------------------------------------------
@@ -112,7 +122,7 @@ async function main() {
   try {
     await main()
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error)
+    console.error(formatFatalError(error))
     process.exitCode = 1
   }
 })()

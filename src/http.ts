@@ -90,6 +90,8 @@ type ReleaseArchiveMetadata = {
 
 type StorageUploadHeaders = Record<string, string>
 
+const MAX_ERROR_BODY_LENGTH = 500
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -105,8 +107,10 @@ function buildHeaders(apiKey: string, extra?: HeadersInit) {
   }
 }
 
-async function parseJson(response: Response) {
-  return response.json() as Promise<JsonObject>
+function truncateErrorBody(body: string) {
+  return body.length > MAX_ERROR_BODY_LENGTH
+    ? `${body.slice(0, MAX_ERROR_BODY_LENGTH)}...`
+    : body
 }
 
 async function assertResponseOk(response: Response) {
@@ -114,11 +118,22 @@ async function assertResponseOk(response: Response) {
     return
   }
 
-  const payload = await parseJson(response).catch(() => ({} as JsonObject))
+  const body = await response.text().catch(() => '')
+  const trimmedBody = body.trim()
+  const payload = trimmedBody
+    ? (() => {
+      try {
+        return JSON.parse(trimmedBody) as JsonObject
+      } catch {
+        return {} as JsonObject
+      }
+    })()
+    : {}
   const messageValue = payload.message
-  const message = typeof messageValue === 'string'
-    ? messageValue
+  const fallbackMessage = trimmedBody
+    ? `Request failed with status ${response.status}: ${truncateErrorBody(trimmedBody)}`
     : `Request failed with status ${response.status}`
+  const message = typeof messageValue === 'string' ? messageValue : fallbackMessage
 
   if (message === 'App not found in selected project') {
     throw new Error(`${message}. Check that appId is correct and the app is not archived.`)
@@ -138,7 +153,7 @@ async function requestJson<T>(input: {
   const url = new URL(`${normalizeApiUrl(input.apiUrl)}${input.path}`)
 
   for (const [key, value] of Object.entries(input.query ?? {})) {
-    if (value) {
+    if (value !== undefined) {
       url.searchParams.set(key, value)
     }
   }
@@ -176,6 +191,26 @@ function assertRequiredStorageUploadHeaders(uploadHeaders: StorageUploadHeaders)
   if (!contentType || !contentLength) {
     throw new Error('Upload intent is missing required storage upload headers')
   }
+}
+
+function isLocalHttpUploadUrl(url: URL) {
+  return url.protocol === 'http:'
+    && (
+      url.hostname === 'localhost'
+      || url.hostname === '127.0.0.1'
+      || url.hostname === '[::1]'
+      || url.hostname === '::1'
+    )
+}
+
+function assertSecureUploadUrl(uploadUrl: string) {
+  const url = new URL(uploadUrl)
+
+  if (url.protocol === 'https:' || isLocalHttpUploadUrl(url)) {
+    return
+  }
+
+  throw new Error('Refusing to upload bundle over non-HTTPS URL.')
 }
 
 // -----------------------------------------------------------------------------
@@ -220,6 +255,7 @@ export async function uploadReleaseArchive(input: {
   uploadHeaders: StorageUploadHeaders
 }) {
   assertRequiredStorageUploadHeaders(input.uploadHeaders)
+  assertSecureUploadUrl(input.uploadUrl)
 
   const response = await fetch(input.uploadUrl, {
     method: 'PUT',

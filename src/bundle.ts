@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 
-import { zipSync } from 'fflate'
+import { zip } from 'fflate'
 
 import { assertNoNativeBundleEntries, findNativeBundleEntries } from './bundle-validation'
 import type { MobilePlatform, Target } from './config'
@@ -50,6 +50,9 @@ type BundleOptions = {
   target: Target
   beforeWrite?: (manifest: BundleManifest) => Promise<void>
 }
+
+const ZIP_COMPRESSION_LEVEL = 6
+const MAX_RUNTIME_VERSION_SEARCH_DEPTH = 32
 
 type BundleResult = {
   outputDir: string
@@ -171,9 +174,24 @@ async function zipDirectory(directoryPath: string): Promise<ZipDirectoryResult> 
   assertNoNativeBundleEntries(directoryPath, Object.keys(entries))
 
   return {
-    bytes: zipSync(entries, { level: 9 }),
+    bytes: await zipEntries(entries),
     omittedSourceMapCount: omittedSourceMapPaths.length,
   }
+}
+
+function zipEntries(entries: Record<string, Uint8Array>) {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    zip(entries, {
+      level: ZIP_COMPRESSION_LEVEL,
+    }, (error, data) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve(data)
+    })
+  })
 }
 
 function hashBytes(bytes: Uint8Array) {
@@ -259,6 +277,22 @@ async function runCommand(command: string, args: string[], cwd: string) {
   }
 }
 
+async function assertLocalExpoCliAvailable(cwd: string) {
+  const candidates = [
+    path.join(cwd, 'node_modules', '.bin', 'expo'),
+    path.join(cwd, 'node_modules', '.bin', 'expo.cmd'),
+    path.join(cwd, 'node_modules', 'expo', 'package.json'),
+  ]
+
+  for (const candidate of candidates) {
+    if (await Bun.file(candidate).exists()) {
+      return
+    }
+  }
+
+  throw new Error('Expo CLI is required for Expo bundles. Install the project dependencies before running `otalan bundle --target expo`.')
+}
+
 type ExpoConfig = JsonObject & {
   runtimeVersion?: ExpoRuntimeVersionConfig
   sdkVersion?: string
@@ -284,6 +318,8 @@ type ExpoRuntimeVersionConfig = string | {
 // -----------------------------------------------------------------------------
 
 async function readExpoConfig(cwd: string): Promise<ExpoConfig> {
+  await assertLocalExpoCliAvailable(cwd)
+
   const proc = Bun.spawn(['bunx', 'expo', 'config', '--json'], {
     cwd,
     stdout: 'pipe',
@@ -351,14 +387,18 @@ function resolveExpoRuntimeVersionPolicy(
   }
 }
 
-function findRuntimeVersionInObject(value: unknown): string | undefined {
+function findRuntimeVersionInObject(value: unknown, depth = 0): string | undefined {
   if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  if (depth > MAX_RUNTIME_VERSION_SEARCH_DEPTH) {
     return undefined
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const resolved = findRuntimeVersionInObject(item)
+      const resolved = findRuntimeVersionInObject(item, depth + 1)
 
       if (resolved) {
         return resolved
@@ -376,7 +416,7 @@ function findRuntimeVersionInObject(value: unknown): string | undefined {
   }
 
   for (const nestedValue of Object.values(record)) {
-    const resolved = findRuntimeVersionInObject(nestedValue)
+    const resolved = findRuntimeVersionInObject(nestedValue, depth + 1)
 
     if (resolved) {
       return resolved
@@ -386,7 +426,34 @@ function findRuntimeVersionInObject(value: unknown): string | undefined {
   return undefined
 }
 
-async function readExpoExportRuntimeVersion(exportDir: string) {
+function findKnownExpoMetadataRuntimeVersion(value: unknown, platform: MobilePlatform) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  const metadata = value as Record<string, unknown>
+  const runtimeVersion = normalizeOptionalString(metadata.runtimeVersion)
+
+  if (runtimeVersion) {
+    return runtimeVersion
+  }
+
+  const platforms = metadata.platforms
+
+  if (!platforms || typeof platforms !== 'object' || Array.isArray(platforms)) {
+    return undefined
+  }
+
+  const platformMetadata = (platforms as Record<string, unknown>)[platform]
+
+  if (!platformMetadata || typeof platformMetadata !== 'object' || Array.isArray(platformMetadata)) {
+    return undefined
+  }
+
+  return normalizeOptionalString((platformMetadata as Record<string, unknown>).runtimeVersion)
+}
+
+async function readExpoExportRuntimeVersion(exportDir: string, platform: MobilePlatform) {
   const metadataPath = path.join(exportDir, 'metadata.json')
   const contents = await readTextFileIfExists(metadataPath)
 
@@ -395,7 +462,9 @@ async function readExpoExportRuntimeVersion(exportDir: string) {
   }
 
   try {
-    return findRuntimeVersionInObject(JSON.parse(contents) as unknown)
+    const metadata = JSON.parse(contents) as unknown
+    return findKnownExpoMetadataRuntimeVersion(metadata, platform)
+      ?? findRuntimeVersionInObject(metadata)
   } catch {
     return undefined
   }
@@ -768,6 +837,8 @@ async function bundleCapacitorProject(options: BundleOptions): Promise<BundleRes
 }
 
 async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> {
+  await assertLocalExpoCliAvailable(options.cwd)
+
   const exportDir = await createExpoExportDirectory(options.cwd)
 
   try {
@@ -777,7 +848,7 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       options.cwd,
     )
 
-    const exportedRuntimeVersion = await readExpoExportRuntimeVersion(exportDir)
+    const exportedRuntimeVersion = await readExpoExportRuntimeVersion(exportDir, options.platform)
     const expoConfig = await readExpoConfig(options.cwd)
     const runtimeVersion = resolveExpoRuntimeVersion(
       expoConfig,

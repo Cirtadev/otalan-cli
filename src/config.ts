@@ -45,8 +45,18 @@ async function readJsonFile<T>(filePath: string, schema: z.ZodType<T>) {
   return schema.parse(JSON.parse(raw))
 }
 
-async function writeJsonFile(filePath: string, value: unknown, options: { mode?: number } = {}) {
-  await mkdir(path.dirname(filePath), { recursive: true })
+async function writeJsonFile(filePath: string, value: unknown, options: { dirMode?: number, mode?: number } = {}) {
+  const directoryPath = path.dirname(filePath)
+
+  await mkdir(directoryPath, {
+    recursive: true,
+    ...(options.dirMode === undefined ? {} : { mode: options.dirMode }),
+  })
+
+  if (options.dirMode !== undefined) {
+    await chmod(directoryPath, options.dirMode)
+  }
+
   const content = `${JSON.stringify(value, null, 2)}\n`
 
   if (options.mode !== undefined) {
@@ -70,6 +80,7 @@ export async function loadGlobalConfig() {
 
 export async function saveGlobalConfig(config: GlobalConfig, options: { homeDir?: string } = {}) {
   await writeJsonFile(getGlobalConfigPath(options.homeDir), globalConfigSchema.parse(config), {
+    dirMode: 0o700,
     mode: 0o600,
   })
 }

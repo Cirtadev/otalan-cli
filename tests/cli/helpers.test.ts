@@ -133,6 +133,11 @@ describe('resolveApiKeysUrl', () => {
   test('uses the public dashboard URL', () => {
     expect(resolveApiKeysUrl()).toBe('https://otalan.com/api-keys')
   })
+
+  test('derives self-hosted dashboard URLs from the configured API URL', () => {
+    expect(resolveApiKeysUrl('https://api.staging.example.com/v1')).toBe('https://staging.example.com/api-keys')
+    expect(resolveApiKeysUrl('http://localhost:3000/api')).toBe('http://localhost:3000/api-keys')
+  })
 })
 
 describe('openBundleArchive', () => {
