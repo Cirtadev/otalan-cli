@@ -7,6 +7,7 @@ import {
   getReleaseContext,
   getReleaseIngest,
   listReleaseApps,
+  listReleaseChannels,
   listReleases,
   pauseRelease,
   resumeRelease,
@@ -168,6 +169,140 @@ describe('listReleaseApps', () => {
       name: 'Example App',
       appId: 'com.example.app',
     }])
+  })
+})
+
+describe('listReleaseChannels', () => {
+  test('lists project release channels with their apps', async () => {
+    globalThis.fetch = (async (input, init) => {
+      expect(String(input)).toBe('https://api.otalan.com/v1/releases/channels')
+      expect(init?.method).toBe('GET')
+      expect(init?.headers).toEqual({
+        'x-api-key': 'test-key',
+      })
+
+      return new Response(JSON.stringify({
+        items: [
+          {
+            channel: 'staging',
+            apps: [
+              {
+                appId: 'com.example.staging',
+                name: 'Staging App',
+              },
+            ],
+          },
+          {
+            channel: 'production',
+            apps: [
+              {
+                appId: 'com.example.app',
+                name: 'Example App',
+              },
+            ],
+          },
+        ],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }) as typeof fetch
+
+    const items = await listReleaseChannels({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+    })
+
+    expect(items).toEqual([
+      {
+        channel: 'production',
+        apps: [
+          {
+            appId: 'com.example.app',
+            name: 'Example App',
+          },
+        ],
+      },
+      {
+        channel: 'staging',
+        apps: [
+          {
+            appId: 'com.example.staging',
+            name: 'Staging App',
+          },
+        ],
+      },
+    ])
+  })
+
+  test('sorts apps in each channel for stable output', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({
+        items: [
+          {
+            channel: 'production',
+            apps: [
+              {
+                appId: 'com.example.z',
+                name: 'Zeta App',
+              },
+              {
+                appId: 'com.example.a',
+                name: 'Alpha App',
+              },
+            ],
+          },
+        ],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })) as unknown as typeof fetch
+
+    await expect(listReleaseChannels({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+    })).resolves.toEqual([
+      {
+        channel: 'production',
+        apps: [
+          {
+            appId: 'com.example.a',
+            name: 'Alpha App',
+          },
+          {
+            appId: 'com.example.z',
+            name: 'Zeta App',
+          },
+        ],
+      },
+    ])
+  })
+
+  test('sends an appId filter when provided', async () => {
+    globalThis.fetch = (async (input) => {
+      const url = new URL(String(input))
+
+      expect(url.href).toBe('https://api.otalan.com/v1/releases/channels?appId=com.example.app')
+
+      return new Response(JSON.stringify({
+        items: [],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }) as typeof fetch
+
+    await expect(listReleaseChannels({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      appId: 'com.example.app',
+    })).resolves.toEqual([])
   })
 })
 

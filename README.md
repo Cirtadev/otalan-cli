@@ -9,7 +9,7 @@ Published as an npm package, but the CLI itself runs on Bun.
 ## Requirements
 
 - Bun `>= 1.3.11` installed and available on your `PATH`
-- An Otalan **OTA Publish Key** for commands that talk to the Otalan API
+- An Otalan **OTA Publish Key**, generated from the Otalan Dashboard, for commands that talk to the Otalan API
 
 Otalan key prefixes are stable API identifiers:
 
@@ -31,7 +31,7 @@ The npm package ships a Bun-based CLI entrypoint, not standalone native binaries
 Officially supported app targets and versions:
 
 - Capacitor 7 and 8 with `--target capacitor`
-- Expo SDK 54 and 55 with `--target expo`
+- Expo SDK 54, 55, and 56 with `--target expo`
 
 Other app targets and older framework versions may work, but they are not officially supported for the moment.
 
@@ -339,7 +339,7 @@ otalan bundle --target expo --platform ios
 
 Current behavior:
 
-- Official support covers Capacitor 7 and 8, and Expo SDK 54 and 55
+- Official support covers Capacitor 7 and 8, and Expo SDK 54, 55, and 56
 - Other app targets and older framework versions may work, but they are not officially supported for the moment
 - Capacitor packages prebuilt web assets; it does not run your app build command
 - without `--input-dir`, Capacitor checks `dist/` first and then `www/`
@@ -465,6 +465,32 @@ If the direct object-storage upload fails before completion, the CLI calls `POST
 The ZIP is opened as a disk-backed `Bun.file` and passed directly to the returned `PUT` upload URL; `otalan publish` does not load the full archive into memory first.
 
 If validation fails, `otalan publish` exits non-zero and prints the ingest failure reason when the API provides one. This makes the command safe to use directly in CI/CD pipelines.
+
+### `otalan channels`
+
+Prints the resolved organization/project context, then lists distinct release channels for the project resolved from the configured OTA Publish Key. This command does not require `otalan init`.
+
+```bash
+otalan channels
+otalan channels --app-id com.example.app
+```
+
+When `--app-id` is omitted in an interactive terminal, the CLI prompts for an app filter with `All` selected by default. Non-interactive runs default to `All`.
+
+The command uses `GET /v1/releases/channels`, optionally with `?appId=...`, and prints each returned channel with the apps that use it:
+
+```json
+{
+  "items": [
+    {
+      "channel": "production",
+      "apps": [
+        { "appId": "com.example.app", "name": "Example App" }
+      ]
+    }
+  ]
+}
+```
 
 ### `otalan bundles`
 

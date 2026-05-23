@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { formatBundleSummary, formatProjectConfigSummary, formatReleaseContextSummary, printBundlesTable } from '../../src/cli/output'
+import {
+  formatBundleSummary,
+  formatProjectConfigSummary,
+  formatReleaseContextSummary,
+  printBundlesTable,
+  printChannelsTable,
+} from '../../src/cli/output'
 import type { ReleaseContext, ReleaseItem } from '../../src/http'
 
 // -----------------------------------------------------------------------------
@@ -129,5 +135,65 @@ describe('printBundlesTable', () => {
     ])
 
     expect(lines.join('\n')).toContain('bundle-id-that-is-longer-than-t…')
+  })
+})
+
+describe('printChannelsTable', () => {
+  test('prints a channel table', () => {
+    const lines: string[] = []
+    const longApp = 'capacitor8 (com.otalan.capacitor8)'
+
+    console.log = (...values: unknown[]) => {
+      lines.push(values.map(String).join(' '))
+    }
+
+    printChannelsTable([
+      {
+        channel: 'production',
+        apps: [
+          {
+            appId: 'com.example.app',
+            name: 'Example App',
+          },
+          {
+            appId: 'com.otalan.capacitor7',
+            name: 'capacitor7',
+          },
+          {
+            appId: 'com.otalan.capacitor8',
+            name: 'capacitor8',
+          },
+        ],
+      },
+      {
+        channel: 'staging',
+        apps: [
+          {
+            appId: 'com.example.staging',
+            name: 'Staging App',
+          },
+        ],
+      },
+    ])
+
+    expect(lines.join('\n')).toContain('channel')
+    expect(lines.join('\n')).toContain('apps')
+    expect(lines.join('\n')).toContain('production')
+    expect(lines.join('\n')).toContain('Example App (com.example.app)')
+    expect(lines.join('\n')).toContain(longApp)
+    expect(lines.join('\n')).not.toContain('…')
+    expect(lines.join('\n')).toContain('staging')
+  })
+
+  test('prints an empty state when no channels exist', () => {
+    const lines: string[] = []
+
+    console.log = (...values: unknown[]) => {
+      lines.push(values.map(String).join(' '))
+    }
+
+    printChannelsTable([])
+
+    expect(lines).toEqual(['No channels found.'])
   })
 })

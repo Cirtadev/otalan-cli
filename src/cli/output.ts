@@ -1,6 +1,6 @@
 import type { BundleIdSource } from '../bundle'
 import type { ProjectConfig } from '../config'
-import type { BundleIngestItem, ReleaseContext, ReleaseItem } from '../http'
+import type { BundleIngestItem, ReleaseChannelAppItem, ReleaseChannelItem, ReleaseContext, ReleaseItem } from '../http'
 
 // -----------------------------------------------------------------------------
 // Generic output
@@ -77,6 +77,7 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['', '[--runtime-version 1.0.0] [--channel production]', ''],
     ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Publish the current bundle ZIP with rollout metadata.'],
     ['', '[--release-notes "..."] [--optional] [--rollout-percent 100]', ''],
+    ['channels', '[--app-id com.example.app]', 'List release channels for the authenticated project.'],
     ['bundles', '[--platform ios|android]', 'List published bundles for a release tuple.'],
     ['', '[--channel production] [--runtime-version 1.0.0]', ''],
     ['rollback', '--bundle-id ... [--platform ios|android]', 'Reactivate a published bundle.'],
@@ -89,10 +90,10 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['', '[--runtime-version 1.0.0]', ''],
   ] as const
   const notes = [
-    'Official app support: Capacitor 7/8 and Expo SDK 54/55.',
+    'Official app support: Capacitor 7/8 and Expo SDK 54/55/56.',
     'Run `otalan login` to authenticate to a project; `otalan init` selects an active app in that project.',
     'Otalan validates release ZIPs before `otalan publish` succeeds.',
-    'Release commands require the configured app to be active, not archived.',
+    'App-scoped release commands require the configured app to be active, not archived.',
   ] as const
   const commandWidth = 12
   const includeNotes = options.includeNotes ?? true
@@ -274,5 +275,32 @@ export function printBundlesTable(items: ReleaseItem[]) {
   if (items.some(item => !item.resolvedDownloadUrl)) {
     console.log('')
     console.log('Rows with archive "deleted" are shown for history, but they are not selectable for rollback.')
+  }
+}
+
+function formatChannelApp(app: ReleaseChannelAppItem) {
+  return app.name === app.appId ? app.appId : `${app.name} (${app.appId})`
+}
+
+export function printChannelsTable(channels: ReleaseChannelItem[]) {
+  if (channels.length === 0) {
+    console.log('No channels found.')
+    return
+  }
+
+  const rows = channels.map(item => [
+    item.channel,
+    item.apps.map(formatChannelApp).join(', '),
+  ])
+  const headers = ['channel', 'apps']
+  const widths = headers.map((header, index) =>
+    Math.max(header.length, ...rows.map(row => row[index]?.length ?? 0)),
+  )
+
+  console.log(headers.map((header, index) => formatCell(header, widths[index])).join('  '))
+  console.log(widths.map(width => ''.padEnd(width, '-')).join('  '))
+
+  for (const row of rows) {
+    console.log(row.map((cell, index) => formatCell(cell, widths[index])).join('  '))
   }
 }

@@ -11,6 +11,8 @@ import { bundleProject, bundleTestUtils } from '../src/bundle'
 // Fixtures
 // -----------------------------------------------------------------------------
 
+const LARGE_BUNDLE_ENTRY_SIZE = 170_000
+
 async function createLocalExpoCli(cwd: string) {
   await mkdir(path.join(cwd, 'node_modules', 'expo'), { recursive: true })
   await Bun.write(path.join(cwd, 'node_modules', 'expo', 'package.json'), '{"name":"expo"}\n')
@@ -141,6 +143,21 @@ describe('bundleTestUtils.zipDirectory', () => {
     }
   })
 
+  test('compresses large bundle entries without using the async worker ZIP path', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-bundle-test-'))
+
+    try {
+      await Bun.write(path.join(rootDir, 'entry.js'), new Uint8Array(LARGE_BUNDLE_ENTRY_SIZE).fill(120))
+
+      const bundleArchive = await bundleTestUtils.zipDirectory(rootDir)
+      const zipEntries = unzipSync(bundleArchive.bytes)
+
+      expect(zipEntries['entry.js']?.length).toBe(LARGE_BUNDLE_ENTRY_SIZE)
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+
   test('rejects native project files before generating a bundle ZIP', async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'otalan-bundle-test-'))
 
@@ -198,7 +215,7 @@ describe('bundleProject', () => {
       await mkdir(path.join(rootDir, 'dist', 'assets'), { recursive: true })
       await mkdir(outputDir, { recursive: true })
       await Bun.write(path.join(rootDir, 'dist', 'index.html'), '<script src="assets/app.js"></script>')
-      await Bun.write(path.join(rootDir, 'dist', 'assets', 'app.js'), 'console.log("app")')
+      await Bun.write(path.join(rootDir, 'dist', 'assets', 'app.js'), new Uint8Array(LARGE_BUNDLE_ENTRY_SIZE).fill(99))
       await Bun.write(path.join(rootDir, 'dist', 'assets', 'app.js.map'), '{}')
       await Bun.write(path.join(outputDir, 'bundle.zip'), 'stale zip')
 
@@ -218,6 +235,7 @@ describe('bundleProject', () => {
         'assets/app.js',
         'index.html',
       ])
+      expect(zipEntries['assets/app.js']?.length).toBe(LARGE_BUNDLE_ENTRY_SIZE)
       expect(result.omittedSourceMapCount).toBe(1)
     } finally {
       await rm(rootDir, { recursive: true, force: true })
@@ -330,7 +348,7 @@ describe('bundleProject', () => {
             exited: (async () => {
               await mkdir(path.join(exportDir, '_expo', 'static', 'js', 'ios'), { recursive: true })
               await mkdir(path.join(exportDir, 'assets'), { recursive: true })
-              await Bun.write(path.join(exportDir, '_expo', 'static', 'js', 'ios', 'entry.js'), 'console.log("expo")')
+              await Bun.write(path.join(exportDir, '_expo', 'static', 'js', 'ios', 'entry.js'), new Uint8Array(LARGE_BUNDLE_ENTRY_SIZE).fill(101))
               await Bun.write(path.join(exportDir, '_expo', 'static', 'js', 'ios', 'entry.js.map'), '{}')
               await Bun.write(path.join(exportDir, 'assets', 'icon.png'), 'png')
 
@@ -374,6 +392,7 @@ describe('bundleProject', () => {
         '_expo/static/js/ios/entry.js',
         'assets/icon.png',
       ])
+      expect(zipEntries['_expo/static/js/ios/entry.js']?.length).toBe(LARGE_BUNDLE_ENTRY_SIZE)
       expect(result.manifest.target).toBe('expo')
       expect(result.omittedSourceMapCount).toBe(1)
     } finally {

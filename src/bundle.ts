@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 
-import { zip } from 'fflate'
+import { zipSync } from 'fflate'
 
 import { assertNoNativeBundleEntries, findNativeBundleEntries } from './bundle-validation'
 import type { MobilePlatform, Target } from './config'
@@ -180,17 +180,8 @@ async function zipDirectory(directoryPath: string): Promise<ZipDirectoryResult> 
 }
 
 function zipEntries(entries: Record<string, Uint8Array>) {
-  return new Promise<Uint8Array>((resolve, reject) => {
-    zip(entries, {
-      level: ZIP_COMPRESSION_LEVEL,
-    }, (error, data) => {
-      if (error) {
-        reject(error)
-        return
-      }
-
-      resolve(data)
-    })
+  return zipSync(entries, {
+    level: ZIP_COMPRESSION_LEVEL,
   })
 }
 

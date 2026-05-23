@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { stdin, stdout } from 'node:process'
 
 import type { BundleManifest } from '../bundle'
 import { resolveProjectRuntimeVersion } from '../bundle'
@@ -21,6 +22,7 @@ import {
   formatIngestSummary,
   formatPublishSummary,
   formatReleaseContextSummary,
+  printChannelsTable,
   printBundlesTable,
 } from '../cli/output'
 import { promptSelectWithHint, promptWithHint } from '../cli/prompts'
@@ -28,10 +30,13 @@ import type { MobilePlatform } from '../config'
 import {
   type BundleIngestItem,
   type ReleaseItem,
+  type ReleaseAppItem,
   cancelReleaseUpload,
   completeReleaseUpload,
   createReleaseUploadIntent,
   getReleaseIngest,
+  listReleaseApps,
+  listReleaseChannels,
   listReleases,
   pauseRelease,
   rollbackRelease,
@@ -49,6 +54,20 @@ const PLATFORM_OPTIONS = [
 ] as const satisfies ReadonlyArray<{ label: string, value: MobilePlatform }>
 const INGEST_POLL_INTERVAL_MS = 2_000
 const INGEST_WAIT_TIMEOUT_MS = 10 * 60_000
+const ALL_CHANNEL_APPS_OPTION = '__all__'
+
+type ChannelAppSelector = (input: {
+  question: string
+  hint: string
+  fallback: string
+  options: Array<{ label: string, value: string }>
+}) => Promise<string>
+
+type ChannelsListDependencies = {
+  isInteractive?: () => boolean
+  loadApps?: (input: { apiUrl: string, apiKey: string }) => Promise<ReleaseAppItem[]>
+  selectAppId?: ChannelAppSelector
+}
 
 async function resolveReleaseAccess(
   context: CommandContext,
@@ -77,6 +96,74 @@ async function resolveReleaseAccess(
     api,
     project,
   }
+}
+
+async function resolveReleaseProjectAccess(options: Record<string, string | boolean>) {
+  const api = await resolveApiConfig(options)
+  const releaseContext = await assertReleaseContextMatchesConfig({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+  })
+
+  for (const line of formatReleaseContextSummary(releaseContext).split('\n')) {
+    console.log(line)
+  }
+
+  console.log('')
+
+  return {
+    api,
+  }
+}
+
+function formatReleaseAppOption(app: ReleaseAppItem) {
+  return app.name === app.appId ? app.appId : `${app.name} (${app.appId})`
+}
+
+function isInteractiveTerminal() {
+  return Boolean(stdin.isTTY && stdout.isTTY)
+}
+
+async function resolveChannelsAppId(input: {
+  apiUrl: string
+  apiKey: string
+  options: Record<string, string | boolean>
+} & ChannelsListDependencies) {
+  const explicitAppId = readStringOption(input.options, 'app-id')
+
+  if (explicitAppId) {
+    return explicitAppId
+  }
+
+  const isInteractive = input.isInteractive ?? isInteractiveTerminal
+
+  if (!isInteractive()) {
+    return undefined
+  }
+
+  const loadApps = input.loadApps ?? listReleaseApps
+  const selectAppId = input.selectAppId ?? promptSelectWithHint
+  const apps = await loadApps({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+  })
+  const selectedAppId = await selectAppId({
+    question: 'App',
+    fallback: ALL_CHANNEL_APPS_OPTION,
+    hint: 'Filter channels by app, or keep All to show every project channel.',
+    options: [
+      {
+        label: 'All',
+        value: ALL_CHANNEL_APPS_OPTION,
+      },
+      ...apps.map(app => ({
+        label: formatReleaseAppOption(app),
+        value: app.appId,
+      })),
+    ],
+  })
+
+  return selectedAppId === ALL_CHANNEL_APPS_OPTION ? undefined : selectedAppId
 }
 
 function resolveOutputDir(
@@ -508,6 +595,26 @@ export async function handleStatus(
   }))
 }
 
+export async function handleChannelsList(
+  options: Record<string, string | boolean>,
+  dependencies: ChannelsListDependencies = {},
+) {
+  const { api } = await resolveReleaseProjectAccess(options)
+  const appId = await resolveChannelsAppId({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+    options,
+    ...dependencies,
+  })
+  const channels = await listReleaseChannels({
+    apiUrl: api.apiUrl,
+    apiKey: api.apiKey,
+    appId,
+  })
+
+  printChannelsTable(channels)
+}
+
 export async function handleBundlesList(
   context: CommandContext,
   options: Record<string, string | boolean>,
@@ -536,6 +643,7 @@ export async function handleBundlesList(
 // -----------------------------------------------------------------------------
 
 export const releaseTestUtils = {
+  resolveChannelsAppId,
   isTerminalIngestStatus,
   resolveRollbackTargetBundleId,
   resolveRolloutPercent,

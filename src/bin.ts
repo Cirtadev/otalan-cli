@@ -8,6 +8,7 @@ import { handleBundle } from './commands/bundle'
 import { handleKeygen } from './commands/keygen'
 import {
   handleBundlesList,
+  handleChannelsList,
   handlePause,
   handlePublish,
   handleResume,
@@ -83,6 +84,9 @@ async function main() {
       return
     case 'status':
       await handleStatus(context, parsed.options)
+      return
+    case 'channels':
+      await handleChannelsList(parsed.options)
       return
     case 'bundles':
       if (!parsed.subcommand || parsed.subcommand === 'ls') {

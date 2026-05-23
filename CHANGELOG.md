@@ -2,6 +2,20 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.5.0 - 2026-05-23
+
+### Added
+
+- Add `otalan channels` to print the resolved organization/project context and list project release channels with their apps from `GET /v1/releases/channels`; it supports `--app-id`, and interactive runs default to `All` before optionally filtering by app.
+
+### Changed
+
+- Document Expo SDK 56 as officially supported.
+
+### Fixed
+
+- Avoid Bun worker ZIP compression failures when packaging large Expo export assets.
+
 ## 1.4.1 - 2026-05-22
 
 ### Changed

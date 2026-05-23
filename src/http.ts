@@ -41,6 +41,21 @@ export type ReleaseAppItem = {
   appId: string
 }
 
+export type ReleaseChannelAppItem = {
+  appId: string
+  name: string
+}
+
+export type ReleaseChannelItem = {
+  channel: string
+  apps: ReleaseChannelAppItem[]
+}
+
+type ReleaseChannelResponseItem = {
+  channel?: unknown
+  apps?: unknown
+}
+
 export type BundleIngestItem = {
   id: string
   appId: string
@@ -213,6 +228,47 @@ function assertSecureUploadUrl(uploadUrl: string) {
   throw new Error('Refusing to upload bundle over non-HTTPS URL.')
 }
 
+function normalizeReleaseChannelApps(item: ReleaseChannelResponseItem, channelIndex: number) {
+  if (!Array.isArray(item.apps)) {
+    throw new Error(`Release channel response item ${channelIndex + 1} is missing apps.`)
+  }
+
+  return item.apps
+    .map((app, appIndex) => {
+      if (
+        app
+        && typeof app === 'object'
+        && 'appId' in app
+        && 'name' in app
+        && typeof app.appId === 'string'
+        && typeof app.name === 'string'
+      ) {
+        return {
+          appId: app.appId,
+          name: app.name,
+        }
+      }
+
+      throw new Error(`Release channel response item ${channelIndex + 1} app ${appIndex + 1} is invalid.`)
+    })
+    .sort((left, right) => left.name.localeCompare(right.name) || left.appId.localeCompare(right.appId))
+}
+
+function normalizeReleaseChannels(items: ReleaseChannelResponseItem[]): ReleaseChannelItem[] {
+  return items
+    .map((item, index) => {
+      if (typeof item.channel === 'string') {
+        return {
+          channel: item.channel,
+          apps: normalizeReleaseChannelApps(item, index),
+        }
+      }
+
+      throw new Error(`Release channel response item ${index + 1} is invalid.`)
+    })
+    .sort((left, right) => left.channel.localeCompare(right.channel))
+}
+
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
@@ -318,6 +374,23 @@ export async function listReleaseApps(input: ReleaseClientConfig) {
   })
 
   return payload.items
+}
+
+export async function listReleaseChannels(input: ReleaseClientConfig & {
+  appId?: string
+}) {
+  const payload = await requestJson<{
+    items: ReleaseChannelResponseItem[]
+  }>({
+    apiUrl: input.apiUrl,
+    apiKey: input.apiKey,
+    path: '/v1/releases/channels',
+    query: {
+      appId: input.appId,
+    },
+  })
+
+  return normalizeReleaseChannels(payload.items)
 }
 
 export async function getReleaseIngest(input: ReleaseClientConfig & {
