@@ -25,6 +25,7 @@ import {
   printChannelsTable,
   printBundlesTable,
 } from '../cli/output'
+import { createProgressReporter } from '../cli/progress'
 import { promptSelectWithHint, promptWithHint } from '../cli/prompts'
 import type { MobilePlatform } from '../config'
 import {
@@ -55,6 +56,8 @@ const PLATFORM_OPTIONS = [
 const INGEST_POLL_INTERVAL_MS = 2_000
 const INGEST_WAIT_TIMEOUT_MS = 10 * 60_000
 const ALL_CHANNEL_APPS_OPTION = '__all__'
+const ANSI_GREEN = '\x1B[32m'
+const ANSI_RESET = '\x1B[0m'
 
 type ChannelAppSelector = (input: {
   question: string
@@ -72,6 +75,7 @@ type ChannelsListDependencies = {
 async function resolveReleaseAccess(
   context: CommandContext,
   options: Record<string, string | boolean>,
+  output: { printSummary?: boolean } = {},
 ) {
   const api = await resolveApiConfig(options)
   const project = await resolveProject(context)
@@ -83,14 +87,16 @@ async function resolveReleaseAccess(
     projectSlug: project.projectSlug,
   })
 
-  for (const line of formatReleaseContextSummary(releaseContext, {
-    name: project.appName,
-    appId: project.appId,
-  }).split('\n')) {
-    console.log(line)
-  }
+  if (output.printSummary ?? true) {
+    for (const line of formatReleaseContextSummary(releaseContext, {
+      name: project.appName,
+      appId: project.appId,
+    }).split('\n')) {
+      console.log(line)
+    }
 
-  console.log('')
+    console.log('')
+  }
 
   return {
     api,
@@ -204,6 +210,18 @@ function resolveRolloutPercent(options: Record<string, string | boolean>) {
   }
 
   return rolloutPercent
+}
+
+function isVerboseOutput(options: Record<string, string | boolean>) {
+  return readBooleanOption(options, 'verbose', false)
+}
+
+function formatPublishSuccessMessage() {
+  const live = stdout.isTTY
+    ? `${ANSI_GREEN}Live${ANSI_RESET}`
+    : 'Live'
+
+  return `Release is ${live} 🚀`
 }
 
 async function promptPlatformChoice() {
@@ -352,28 +370,53 @@ export async function handlePublish(
   context: CommandContext,
   options: Record<string, string | boolean>,
 ) {
-  const { api, project } = await resolveReleaseAccess(context, options)
+  const verbose = isVerboseOutput(options)
+  const progress = verbose
+    ? undefined
+    : createProgressReporter({
+      animated: isInteractiveTerminal(),
+    })
+  const { api, project } = await resolveReleaseAccess(context, options, {
+    printSummary: verbose,
+  })
   const { outputDir, manifest, platform, runtimeVersion, channel } = await resolveReleaseTupleFromManifest(context, options)
   const mandatory = !readBooleanOption(options, 'optional', false)
   const rolloutPercent = resolveRolloutPercent(options)
   const releaseNotes = readStringOption(options, 'release-notes')
-  const archive = await openBundleArchive(outputDir, manifest)
-  const uploadIntent = await createReleaseUploadIntent({
-    apiUrl: api.apiUrl,
-    apiKey: api.apiKey,
-    appId: project.appId,
-    platform,
-    channel,
-    runtimeVersion,
-    bundleId: manifest.bundleId,
-    mandatory,
-    rolloutPercent,
-    releaseNotes,
-    fileName: archive.fileName,
-    fileSizeBytes: archive.fileSizeBytes,
-    contentType: archive.contentType,
-    expoManifest: resolveManifestExpoPublishMetadata(manifest),
-  })
+
+  if (!verbose) {
+    console.log('')
+  }
+
+  const preparing = progress?.start('Preparing')
+  let archive: Awaited<ReturnType<typeof openBundleArchive>>
+  let uploadIntent: Awaited<ReturnType<typeof createReleaseUploadIntent>>
+
+  try {
+    archive = await openBundleArchive(outputDir, manifest)
+    uploadIntent = await createReleaseUploadIntent({
+      apiUrl: api.apiUrl,
+      apiKey: api.apiKey,
+      appId: project.appId,
+      platform,
+      channel,
+      runtimeVersion,
+      bundleId: manifest.bundleId,
+      mandatory,
+      rolloutPercent,
+      releaseNotes,
+      fileName: archive.fileName,
+      fileSizeBytes: archive.fileSizeBytes,
+      contentType: archive.contentType,
+      expoManifest: resolveManifestExpoPublishMetadata(manifest),
+    })
+    preparing?.succeed()
+  } catch (error) {
+    preparing?.fail()
+    throw error
+  }
+
+  const uploading = progress?.start('Uploading')
 
   try {
     await uploadReleaseArchive({
@@ -388,46 +431,72 @@ export async function handlePublish(
       ingestId: uploadIntent.item.id,
     }).catch(() => undefined)
 
+    uploading?.fail()
     throw error
   }
 
-  const ingest = await completeReleaseUpload({
-    apiUrl: api.apiUrl,
-    apiKey: api.apiKey,
-    ingestId: uploadIntent.item.id,
-  })
+  uploading?.succeed()
 
-  console.log('')
-  console.log(formatPublishSummary({
-    bundleId: manifest.bundleId,
-    platform,
-    channel,
-    runtimeVersion,
-    rolloutPercent,
-    mandatory,
-    releaseNotes,
-  }))
-  console.log('')
-  console.log(formatIngestSummary({
-    ingest,
-  }))
-  console.log('')
-  console.log('Waiting for validation...')
+  const validating = progress?.start('Validating')
+  let ingest: BundleIngestItem
 
-  const completedIngest = await waitForReleaseIngest({
-    ingest,
-    loadIngest: ingestId =>
-      getReleaseIngest({
-        apiUrl: api.apiUrl,
-        apiKey: api.apiKey,
-        ingestId,
-      }),
-    onStatusChange: nextIngest => {
-      console.log(`Ingest status: ${nextIngest.status}`)
-    },
-  })
+  try {
+    ingest = await completeReleaseUpload({
+      apiUrl: api.apiUrl,
+      apiKey: api.apiKey,
+      ingestId: uploadIntent.item.id,
+    })
+  } catch (error) {
+    validating?.fail()
+    throw error
+  }
+
+  if (verbose) {
+    console.log('')
+    console.log(formatPublishSummary({
+      bundleId: manifest.bundleId,
+      platform,
+      channel,
+      runtimeVersion,
+      rolloutPercent,
+      mandatory,
+      releaseNotes,
+    }))
+    console.log('')
+    console.log(formatIngestSummary({
+      ingest,
+    }))
+    console.log('')
+    console.log('Waiting for validation...')
+  }
+
+  let completedIngest: BundleIngestItem
+
+  try {
+    completedIngest = await waitForReleaseIngest({
+      ingest,
+      loadIngest: ingestId =>
+        getReleaseIngest({
+          apiUrl: api.apiUrl,
+          apiKey: api.apiKey,
+          ingestId,
+        }),
+      onStatusChange: nextIngest => {
+        if (!verbose) {
+          return
+        }
+
+        console.log(`Ingest status: ${nextIngest.status}`)
+      },
+    })
+  } catch (error) {
+    validating?.fail()
+    throw error
+  }
 
   if (completedIngest.status === 'failed') {
+    validating?.fail()
+
     if (completedIngest.failureReason) {
       throw new Error(`Release validation failed for ingest ${completedIngest.id}: ${completedIngest.failureReason}`)
     }
@@ -435,12 +504,22 @@ export async function handlePublish(
     throw new Error(`Release validation failed for ingest ${completedIngest.id}.`)
   }
 
+  validating?.succeed()
+
+  const activating = progress?.start('Activating')
+
+  activating?.succeed()
+
   console.log('')
-  console.log('Release published.')
-  console.log('')
-  console.log(formatIngestSummary({
-    ingest: completedIngest,
-  }))
+
+  console.log(formatPublishSuccessMessage())
+
+  if (verbose) {
+    console.log('')
+    console.log(formatIngestSummary({
+      ingest: completedIngest,
+    }))
+  }
 }
 
 export async function handleRollback(

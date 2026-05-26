@@ -2,6 +2,16 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.5.1 - 2026-05-26
+
+### Changed
+
+- Make `otalan publish` show compact animated progress by default, with green success and red failure states in interactive terminals.
+- Add spacing around compact publish progress and highlight `Live` in green in interactive terminals.
+- Keep CI-friendly static publish progress output in non-TTY environments.
+- Move the previous detailed publish output behind `otalan publish --verbose`.
+- Print `✅ Bundle generated` after `otalan bundle` writes the bundle output.
+
 ## 1.5.0 - 2026-05-23
 
 ### Added

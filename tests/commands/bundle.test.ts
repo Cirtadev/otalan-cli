@@ -114,6 +114,9 @@ describe('handleBundle', () => {
       expect(output).toContain('Organization: test-org')
       expect(output).toContain('Project: mobile-app')
       expect(output).toContain('App: Customer Portal (com.example.app)')
+      expect(output).toContain('✅ Bundle generated')
+      expect(output.at(-2)).toBe('')
+      expect(output.at(-1)).toBe('✅ Bundle generated')
       expect(output.indexOf('App: Customer Portal (com.example.app)')).toBeLessThan(
         output.indexOf('Build web assets before running `otalan bundle`.'),
       )

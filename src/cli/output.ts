@@ -76,7 +76,7 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
     ['', '[--bundle-from-package] [--bundle-id 1.0.5]', ''],
     ['', '[--runtime-version 1.0.0] [--channel production]', ''],
     ['publish', '[--output-dir .otalan/bundle] [--channel production]', 'Publish the current bundle ZIP with rollout metadata.'],
-    ['', '[--release-notes "..."] [--optional] [--rollout-percent 100]', ''],
+    ['', '[--release-notes "..."] [--optional] [--rollout-percent 100] [--verbose]', ''],
     ['channels', '[--app-id com.example.app]', 'List release channels for the authenticated project.'],
     ['bundles', '[--platform ios|android]', 'List published bundles for a release tuple.'],
     ['', '[--channel production] [--runtime-version 1.0.0]', ''],

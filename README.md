@@ -282,6 +282,8 @@ Saves the project OTA Publish Key and API base URL locally.
 
 If auth is already saved, `otalan login` shows the current API URL as the prompt default and shows the current OTA Publish Key in masked form. Press Enter to keep either value.
 
+During interactive login, typed OTA Publish Key characters are echoed as `*` so the terminal shows input progress without exposing the key.
+
 ```bash
 otalan login --api-key otalan_ci_xxx --api-url https://api.otalan.com
 ```
@@ -348,6 +350,7 @@ Current behavior:
 - Expo does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
+- successful bundle runs end with `✅ Bundle generated`
 - source map files (`*.map`) are omitted from bundle ZIPs by default; the CLI prints the omitted file count when any are skipped
 - native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
 - when `otalan.config.json` is available, the CLI prints the linked project and app before packaging
@@ -429,6 +432,7 @@ Current behavior:
 - `--rollout-percent` accepts an integer from `0` to `100`
 - `--optional` marks the update as non-mandatory
 - `--release-notes` attaches release notes to the published bundle
+- default output shows compact publish progress with animated terminal status icons; `--verbose` prints the full project, release, and ingest details
 - Expo publish forwards the full generated Otalan satellite manifest when present
 - Expo publish sends the generated manifest with `runtimeVersion`
 - Expo manifests include the Expo config captured from `bunx expo config --json`; avoid placing secrets in Expo config fields that are not intended to be uploaded

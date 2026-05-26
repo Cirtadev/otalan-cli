@@ -503,6 +503,8 @@ export async function handleBundle(context: CommandContext, options: Record<stri
   console.log(formatBundleIdSource(result.bundleIdSource))
   console.log('')
   printJson(result)
+  console.log('')
+  console.log('✅ Bundle generated')
 }
 
 // -----------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import { stdin as input, stdout as output } from 'node:process'
 const ANSI_RESET = '\u001B[0m'
 const ANSI_BOLD = '\u001B[1m'
 const ANSI_CYAN = '\u001B[36m'
+const SECRET_INPUT_MASK = '*'
 
 // -----------------------------------------------------------------------------
 // Shared types
@@ -47,6 +48,22 @@ export type PromptSelectWithHintInput<T extends string> = PromptHintInput & {
 type Keypress = {
   ctrl?: boolean
   name?: string
+}
+
+type PromptOutput = {
+  write: (chunk: string) => unknown
+}
+
+function writeSecretInputMask(stream: PromptOutput, text: string) {
+  if (!text) {
+    return
+  }
+
+  stream.write(SECRET_INPUT_MASK.repeat(text.length))
+}
+
+function eraseSecretInputMask(stream: PromptOutput) {
+  stream.write('\b \b')
 }
 
 async function promptSecret(question: string, fallback?: string) {
@@ -89,12 +106,17 @@ async function promptSecret(question: string, fallback?: string) {
       }
 
       if (key.name === 'backspace' || key.name === 'delete') {
-        answer = answer.slice(0, -1)
+        if (answer.length > 0) {
+          answer = answer.slice(0, -1)
+          eraseSecretInputMask(output)
+        }
+
         return
       }
 
       if (!key.ctrl && text) {
         answer += text
+        writeSecretInputMask(output, text)
       }
     }
 
@@ -294,4 +316,9 @@ async function promptSelect<T extends string>(
 export async function promptSelectWithHint<T extends string>(inputValue: PromptSelectWithHintInput<T>) {
   printHint(inputValue)
   return promptSelect(inputValue.question, inputValue.options, inputValue.fallback)
+}
+
+export const promptTestUtils = {
+  eraseSecretInputMask,
+  writeSecretInputMask,
 }
