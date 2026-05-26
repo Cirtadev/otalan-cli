@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { stdout } from 'node:process'
 
 import type { BundleIngestItem } from '../../src/http'
 import { handlePublish } from '../../src/commands/release'
@@ -12,10 +13,15 @@ import { handlePublish } from '../../src/commands/release'
 
 const originalFetch = globalThis.fetch
 const originalConsoleLog = console.log
+const originalStdoutIsTTY = stdout.isTTY
 
 afterEach(() => {
   globalThis.fetch = originalFetch
   console.log = originalConsoleLog
+  Object.defineProperty(stdout, 'isTTY', {
+    configurable: true,
+    value: originalStdoutIsTTY,
+  })
 })
 
 // -----------------------------------------------------------------------------
@@ -220,6 +226,13 @@ function mockSuccessfulPublish(events: string[]) {
   }) as typeof fetch
 }
 
+function forceStaticProgressOutput() {
+  Object.defineProperty(stdout, 'isTTY', {
+    configurable: true,
+    value: false,
+  })
+}
+
 // -----------------------------------------------------------------------------
 // Publish command
 // -----------------------------------------------------------------------------
@@ -230,6 +243,7 @@ describe('handlePublish', () => {
     const events: string[] = []
     const output: string[] = []
 
+    forceStaticProgressOutput()
     console.log = (...args: unknown[]) => {
       output.push(args.map(String).join(' '))
     }
@@ -264,6 +278,7 @@ describe('handlePublish', () => {
     const events: string[] = []
     const output: string[] = []
 
+    forceStaticProgressOutput()
     console.log = (...args: unknown[]) => {
       output.push(args.map(String).join(' '))
     }
@@ -302,6 +317,7 @@ describe('handlePublish', () => {
     }
     const events: string[] = []
 
+    forceStaticProgressOutput()
     await writeFile(path.join(outputDir, 'bundle-1.0.0-web.3.zip'), 'zip-bytes')
     await writeFile(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 
