@@ -74,6 +74,18 @@ function isVerboseOutput(options: Record<string, string | boolean>) {
   return readBooleanOption(options, 'verbose', false, ['v'])
 }
 
+function formatBundleDirectoryHint(input: {
+  cwd: string
+  outputDir: string
+}) {
+  const relativeOutputDir = path.relative(input.cwd, input.outputDir)
+  const displayPath = relativeOutputDir && !relativeOutputDir.startsWith('..') && !path.isAbsolute(relativeOutputDir)
+    ? relativeOutputDir
+    : input.outputDir
+
+  return `Generated bundle folder: ${displayPath}`
+}
+
 function resolveManifestRuntimeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
   if (!manifest || manifest.platform !== platform) {
     return undefined
@@ -520,6 +532,10 @@ export async function handleBundle(context: CommandContext, options: Record<stri
 
   console.log('')
   console.log('✅ Bundle created')
+  console.log(formatBundleDirectoryHint({
+    cwd: context.cwd,
+    outputDir,
+  }))
 
   if (!verbose) {
     return
@@ -550,4 +566,5 @@ export const bundleCommandTestUtils = {
   resolvePublishedBundleIdFromReleases,
   resolvePublishedBundleHint,
   warnUnavailableExistingPublishedBundleCheck,
+  formatBundleDirectoryHint,
 }

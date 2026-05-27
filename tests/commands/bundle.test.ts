@@ -125,11 +125,17 @@ describe('handleBundle', () => {
         'bundle-id': '1.2.3-web.1',
       })
 
+      const outputDir = path.join(cwd, '.otalan', 'bundle')
+
       expect(output).toEqual([
         '',
         '✓ Bundling',
         '',
         '✅ Bundle created',
+        bundleCommandTestUtils.formatBundleDirectoryHint({
+          cwd,
+          outputDir,
+        }),
       ])
     } finally {
       await rm(cwd, { recursive: true, force: true })
@@ -176,6 +182,10 @@ describe('handleBundle', () => {
       expect(output).toContain('Build web assets before running `otalan bundle`.')
       expect(output).toContain('✓ Bundling')
       expect(output).toContain('✅ Bundle created')
+      expect(output).toContain(bundleCommandTestUtils.formatBundleDirectoryHint({
+        cwd,
+        outputDir: path.join(cwd, '.otalan', 'bundle'),
+      }))
       expect(joinedOutput).toContain('Using bundle ID from --bundle-id.')
       expect(joinedOutput).toContain('"bundleId": "1.2.3-web.1"')
       expect(output.indexOf('App: Customer Portal (com.example.app)')).toBeLessThan(
@@ -258,6 +268,25 @@ describe('handleBundle', () => {
     } finally {
       await rm(cwd, { recursive: true, force: true })
     }
+  })
+})
+
+describe('bundleCommandTestUtils.formatBundleDirectoryHint', () => {
+  test('prints the generated bundle folder', () => {
+    const cwd = '/project'
+    const outputDir = '/project/.otalan/bundle'
+
+    expect(bundleCommandTestUtils.formatBundleDirectoryHint({
+      cwd,
+      outputDir,
+    })).toBe('Generated bundle folder: .otalan/bundle')
+  })
+
+  test('prints absolute output folders outside the project', () => {
+    expect(bundleCommandTestUtils.formatBundleDirectoryHint({
+      cwd: '/project',
+      outputDir: '/tmp/otalan-bundle',
+    })).toBe('Generated bundle folder: /tmp/otalan-bundle')
   })
 })
 

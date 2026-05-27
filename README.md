@@ -350,7 +350,7 @@ Current behavior:
 - Expo does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
-- default output shows compact bundle progress with publish-style status icons and ends with `✅ Bundle created`
+- default output shows compact bundle progress with publish-style status icons, ends with `✅ Bundle created`, and prints the generated bundle folder
 - `--verbose` or `-v` prints the linked project/app, Capacitor build reminder, source-map omitted count, bundle ID source, and JSON bundle result
 - source map files (`*.map`) are omitted from bundle ZIPs by default
 - native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
@@ -501,6 +501,8 @@ The command uses `GET /v1/releases/channels`, optionally with `?appId=...`, and 
 Lists remote bundles for the current app so you can choose a bundle for rollback or rollout operations.
 
 Remote bundle tables display the API `publishedAt` timestamp, not the bundle row `createdAt` timestamp.
+
+In interactive terminals, the active bundle row is highlighted in green.
 
 Default resolution order:
 

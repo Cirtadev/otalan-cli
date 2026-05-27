@@ -1,3 +1,5 @@
+import { stdout } from 'node:process'
+
 import type { BundleIdSource } from '../bundle'
 import type { ProjectConfig } from '../config'
 import type { BundleIngestItem, ReleaseChannelAppItem, ReleaseChannelItem, ReleaseContext, ReleaseItem } from '../http'
@@ -5,6 +7,11 @@ import type { BundleIngestItem, ReleaseChannelAppItem, ReleaseChannelItem, Relea
 // -----------------------------------------------------------------------------
 // Generic output
 // -----------------------------------------------------------------------------
+
+const ANSI_GREEN = '\x1B[32m'
+const ANSI_RESET = '\x1B[0m'
+const ANSI_ESCAPE = String.fromCharCode(27)
+const ANSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*m`, 'g')
 
 export function printJson(value: unknown) {
   console.log(JSON.stringify(value, null, 2))
@@ -228,16 +235,34 @@ export function formatIngestSummary(input: {
   return lines.join('\n')
 }
 
+function stripAnsi(value: string) {
+  return value.replace(ANSI_PATTERN, '')
+}
+
+function visibleLength(value: string) {
+  return stripAnsi(value).length
+}
+
+function formatGreen(value: string) {
+  if (!stdout.isTTY) {
+    return value
+  }
+
+  return `${ANSI_GREEN}${value}${ANSI_RESET}`
+}
+
 function formatCell(value: string, width: number) {
-  if (value.length <= width) {
-    return value.padEnd(width, ' ')
+  const length = visibleLength(value)
+
+  if (length <= width) {
+    return `${value}${''.padEnd(width - length, ' ')}`
   }
 
   if (width <= 1) {
     return '…'
   }
 
-  return `${value.slice(0, width - 1)}…`
+  return `${stripAnsi(value).slice(0, width - 1)}…`
 }
 
 // -----------------------------------------------------------------------------
@@ -269,7 +294,9 @@ export function printBundlesTable(items: ReleaseItem[]) {
   console.log(widths.map(width => ''.padEnd(width, '-')).join('  '))
 
   for (const row of rows) {
-    console.log(row.map((cell, index) => formatCell(cell, widths[index])).join('  '))
+    const formattedRow = row.map((cell, index) => formatCell(cell, widths[index])).join('  ')
+
+    console.log(row[0] === 'yes' ? formatGreen(formattedRow) : formattedRow)
   }
 
   if (items.some(item => !item.resolvedDownloadUrl)) {

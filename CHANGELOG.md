@@ -2,6 +2,13 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.5.3 - 2026-05-28
+
+### Changed
+
+- Highlight the full active bundle table row in green for interactive `bundles` and rollback output.
+- Print the generated bundle folder after bundle generation.
+
 ## 1.5.2 - 2026-05-28
 
 ### Changed

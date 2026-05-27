@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { stdout } from 'node:process'
 
 import {
   formatBundleSummary,
@@ -14,9 +15,14 @@ import type { ReleaseContext, ReleaseItem } from '../../src/http'
 // -----------------------------------------------------------------------------
 
 const originalConsoleLog = console.log
+const originalStdoutIsTTY = stdout.isTTY
 
 afterEach(() => {
   console.log = originalConsoleLog
+  Object.defineProperty(stdout, 'isTTY', {
+    configurable: true,
+    value: originalStdoutIsTTY,
+  })
 })
 
 // -----------------------------------------------------------------------------
@@ -121,6 +127,38 @@ describe('formatBundleSummary', () => {
 })
 
 describe('printBundlesTable', () => {
+  test('prints the active row in green for interactive terminals', () => {
+    const lines: string[] = []
+
+    Object.defineProperty(stdout, 'isTTY', {
+      configurable: true,
+      value: true,
+    })
+    console.log = (...values: unknown[]) => {
+      lines.push(values.map(String).join(' '))
+    }
+
+    printBundlesTable([
+      createRelease({
+        isActive: true,
+        bundleId: 'active-bundle',
+      }),
+      createRelease({
+        isActive: false,
+        bundleId: 'inactive-bundle',
+      }),
+    ])
+
+    const output = lines.join('\n')
+    const activeLine = lines.find(line => line.includes('active-bundle'))
+    const inactiveLine = lines.find(line => line.includes('inactive-bundle'))
+
+    expect(activeLine?.startsWith('\x1B[32m')).toBe(true)
+    expect(activeLine?.endsWith('\x1B[0m')).toBe(true)
+    expect(inactiveLine?.startsWith('\x1B[32m')).toBe(false)
+    expect(output).toContain('inactive-bundle')
+  })
+
   test('marks truncated cells with an ellipsis', () => {
     const lines: string[] = []
 
