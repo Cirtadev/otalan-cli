@@ -81,7 +81,7 @@ function createReleaseContextResponse() {
 // -----------------------------------------------------------------------------
 
 describe('handleBundle', () => {
-  test('prints the linked project and app before packaging', async () => {
+  test('prints compact bundle progress by default', async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-bundle-context-'))
     const output: string[] = []
 
@@ -111,12 +111,58 @@ describe('handleBundle', () => {
         'bundle-id': '1.2.3-web.1',
       })
 
+      expect(output).toEqual([
+        '',
+        '✓ Bundling',
+        '',
+        '✅ Bundle created',
+      ])
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
+  })
+
+  test('prints bundle details when verbose is set', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-bundle-context-'))
+    const output: string[] = []
+
+    try {
+      await mkdir(path.join(cwd, 'dist'), { recursive: true })
+      await Bun.write(path.join(cwd, 'dist', 'index.html'), '<script src="app.js"></script>')
+      await Bun.write(path.join(cwd, 'dist', 'app.js'), 'console.log("app")')
+      await Bun.write(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
+        organizationSlug: 'test-org',
+        projectSlug: 'mobile-app',
+        appName: 'Customer Portal',
+        appId: 'com.example.app',
+      }, null, 2)}\n`)
+
+      console.log = (...args: unknown[]) => {
+        output.push(args.map(String).join(' '))
+      }
+      console.warn = () => {}
+      globalThis.fetch = (async () => {
+        throw new Error('Network unavailable.')
+      }) as unknown as typeof fetch
+
+      await handleBundle({ cwd }, {
+        target: 'capacitor',
+        platform: 'ios',
+        'runtime-version': '1.2.3',
+        'bundle-id': '1.2.3-web.1',
+        v: true,
+      })
+
+      const joinedOutput = output.join('\n')
+
       expect(output).toContain('Organization: test-org')
       expect(output).toContain('Project: mobile-app')
       expect(output).toContain('App: Customer Portal (com.example.app)')
-      expect(output).toContain('✅ Bundle generated')
-      expect(output.at(-2)).toBe('')
-      expect(output.at(-1)).toBe('✅ Bundle generated')
+      expect(output).toContain('Build web assets before running `otalan bundle`.')
+      expect(output).toContain('✓ Bundling')
+      expect(output).toContain('✅ Bundle created')
+      expect(joinedOutput).toContain('Using bundle ID from --bundle-id.')
+      expect(joinedOutput).toContain('"bundleId": "1.2.3-web.1"')
       expect(output.indexOf('App: Customer Portal (com.example.app)')).toBeLessThan(
         output.indexOf('Build web assets before running `otalan bundle`.'),
       )

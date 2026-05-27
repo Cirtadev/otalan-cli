@@ -8,6 +8,7 @@ import {
   handleChannelsList,
   handlePause,
   handleResume,
+  handleRollback,
   handleStatus,
   releaseTestUtils,
 } from '../../src/commands/release'
@@ -181,6 +182,133 @@ function createReleaseContextResponse() {
     },
   })
 }
+
+describe('handleRollback', () => {
+  test('exits without prompting when no bundles are available', async () => {
+    const cwd = await createProjectFixture()
+    const output: string[] = []
+    const requestedPaths: string[] = []
+
+    console.log = (...args: unknown[]) => {
+      output.push(args.map(String).join(' '))
+    }
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      requestedPaths.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+
+      if (url.pathname === '/v1/releases/context') {
+        return createReleaseContextResponse()
+      }
+
+      if (url.pathname === '/v1/releases') {
+        return new Response(JSON.stringify({
+          items: [],
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await handleRollback({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'runtime-version': '1.0.0',
+    })
+
+    expect(requestedPaths).toEqual([
+      'GET /v1/releases/context',
+      'GET /v1/releases',
+    ])
+    expect(output.at(-2)).toBe('')
+    expect(output).toContain('No bundles found for the selected platform, channel, and runtimeVersion.')
+    expect(output).not.toContain('Available bundles')
+  })
+
+  test('prints a checked rollback done message', async () => {
+    const cwd = await createProjectFixture()
+    const output: string[] = []
+    const requestedPaths: string[] = []
+
+    console.log = (...args: unknown[]) => {
+      output.push(args.map(String).join(' '))
+    }
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+      requestedPaths.push(`${init?.method ?? 'GET'} ${url.pathname}`)
+
+      if (url.pathname === '/v1/releases/context') {
+        return createReleaseContextResponse()
+      }
+
+      if (url.pathname === '/v1/releases') {
+        return new Response(JSON.stringify({
+          items: [createRelease()],
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      if (url.pathname === '/v1/releases/rollback') {
+        expect(init?.headers).toEqual({
+          'x-api-key': 'test-key',
+          'Content-Type': 'application/json',
+        })
+        expect(JSON.parse(init?.body as string)).toEqual({
+          appId: 'com.example.app',
+          platform: 'ios',
+          channel: 'production',
+          runtimeVersion: '1.0.0',
+          targetBundleId: '1.0.0-web.1',
+        })
+
+        return new Response(JSON.stringify({
+          item: createRelease({
+            isActive: true,
+            rolloutState: 'active',
+          }),
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await handleRollback({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'runtime-version': '1.0.0',
+      'bundle-id': '1.0.0-web.1',
+    })
+
+    expect(requestedPaths).toEqual([
+      'GET /v1/releases/context',
+      'GET /v1/releases',
+      'POST /v1/releases/rollback',
+    ])
+    const joinedOutput = output.join('\n')
+
+    expect(joinedOutput).toContain('\nBundle selected:\nBundle ID: 1.0.0-web.1')
+    expect(output.at(-1)).toBe('✅ Rollback done')
+    expect(output).not.toContain('Rollback applied.')
+    expect(joinedOutput.indexOf('Bundle selected:')).toBeLessThan(joinedOutput.indexOf('✅ Rollback done'))
+  })
+})
 
 describe('release command context output', () => {
   test('prints organization, project, and app before running a release command', async () => {

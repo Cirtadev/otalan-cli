@@ -213,7 +213,7 @@ function resolveRolloutPercent(options: Record<string, string | boolean>) {
 }
 
 function isVerboseOutput(options: Record<string, string | boolean>) {
-  return readBooleanOption(options, 'verbose', false)
+  return readBooleanOption(options, 'verbose', false, ['v'])
 }
 
 function formatPublishSuccessMessage() {
@@ -541,6 +541,15 @@ export async function handleRollback(
     channel,
     runtimeVersion,
   })
+  const explicitTargetBundleId = readStringOption(options, 'bundle-id')
+    ?? readStringOption(options, 'target-bundle-id')
+
+  if (releases.length === 0 && !explicitTargetBundleId) {
+    console.log('')
+    console.log('No bundles found for the selected platform, channel, and runtimeVersion.')
+    return
+  }
+
   const targetBundleId = await resolveRollbackTargetBundleId({
     options,
     releases,
@@ -567,8 +576,7 @@ export async function handleRollback(
   })
 
   console.log('')
-  console.log('Rollback applied.')
-  console.log('')
+  console.log('Bundle selected:')
   console.log(formatBundleSummary({
     bundleId: item.bundleId,
     platform: item.platform,
@@ -580,6 +588,8 @@ export async function handleRollback(
     publishedAt: item.publishedAt,
     selectable: Boolean(item.resolvedDownloadUrl),
   }))
+  console.log('')
+  console.log('✅ Rollback done')
 }
 
 async function handleRolloutStateChange(

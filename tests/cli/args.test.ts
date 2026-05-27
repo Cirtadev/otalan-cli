@@ -71,4 +71,8 @@ describe('option readers', () => {
     expect(readBooleanOption({ optional: 'false' }, 'optional')).toBe(false)
     expect(readBooleanOption({}, 'optional', true)).toBe(true)
   })
+
+  test('reads boolean options from short aliases', () => {
+    expect(readBooleanOption({ v: true }, 'verbose', false, ['v'])).toBe(true)
+  })
 })

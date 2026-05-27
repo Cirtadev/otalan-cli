@@ -350,10 +350,10 @@ Current behavior:
 - Expo does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
-- successful bundle runs end with `✅ Bundle generated`
-- source map files (`*.map`) are omitted from bundle ZIPs by default; the CLI prints the omitted file count when any are skipped
+- default output shows compact bundle progress with publish-style status icons and ends with `✅ Bundle created`
+- `--verbose` or `-v` prints the linked project/app, Capacitor build reminder, source-map omitted count, bundle ID source, and JSON bundle result
+- source map files (`*.map`) are omitted from bundle ZIPs by default
 - native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
-- when `otalan.config.json` is available, the CLI prints the linked project and app before packaging
 - when `otalan login` and `otalan init` are configured, the CLI checks that the selected `bundleId` is not already published for the selected platform, runtimeVersion, and channel before writing bundle output
 - `--platform` is required so the CLI exports the selected platform and resolves the correct runtime version
 
@@ -432,7 +432,7 @@ Current behavior:
 - `--rollout-percent` accepts an integer from `0` to `100`
 - `--optional` marks the update as non-mandatory
 - `--release-notes` attaches release notes to the published bundle
-- default output shows compact publish progress with animated terminal status icons; `--verbose` prints the full project, release, and ingest details
+- default output shows compact publish progress with animated terminal status icons; `--verbose` or `-v` prints the full project, release, and ingest details
 - Expo publish forwards the full generated Otalan satellite manifest when present
 - Expo publish sends the generated manifest with `runtimeVersion`
 - Expo manifests include the Expo config captured from `bunx expo config --json`; avoid placing secrets in Expo config fields that are not intended to be uploaded
@@ -522,6 +522,8 @@ Reactivates an older bundle for the same tuple.
 ```bash
 otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
 ```
+
+When no bundles exist for the selected platform, channel, and runtimeVersion, `otalan rollback` exits without prompting for a target bundle. Successful rollbacks print `Bundle selected:`, the selected bundle summary, and then `✅ Rollback done`.
 
 ### `otalan pause`
 

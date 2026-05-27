@@ -14,6 +14,7 @@ import {
 } from '../cli/helpers'
 import type { MobilePlatform, Target } from '../config'
 import { formatBundleIdSource, formatProjectConfigSummary, printJson } from '../cli/output'
+import { createProgressReporter } from '../cli/progress'
 import { promptSelectWithHint, promptWithHint, type PromptWithHintInput } from '../cli/prompts'
 import type { BundleManifest } from '../bundle'
 import { listReleases, type ReleaseItem } from '../http'
@@ -67,6 +68,10 @@ async function printBundleProjectContext(context: CommandContext) {
   }
 
   console.log('')
+}
+
+function isVerboseOutput(options: Record<string, string | boolean>) {
+  return readBooleanOption(options, 'verbose', false, ['v'])
 }
 
 function resolveManifestRuntimeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
@@ -402,7 +407,11 @@ function warnUnavailableExistingPublishedBundleCheck(input: {
 // -----------------------------------------------------------------------------
 
 export async function handleBundle(context: CommandContext, options: Record<string, string | boolean>) {
-  await printBundleProjectContext(context)
+  const verbose = isVerboseOutput(options)
+
+  if (verbose) {
+    await printBundleProjectContext(context)
+  }
 
   const targetFallback = readStringOption(options, 'target')
     ? undefined
@@ -461,40 +470,60 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     isInteractive: interactive,
   })
 
-  if (target === 'capacitor') {
+  if (target === 'capacitor' && verbose) {
     console.log('')
     console.log('Build web assets before running `otalan bundle`.')
     console.log('')
   }
 
-  const result = await bundleProject({
-    cwd: context.cwd,
-    outputDir,
-    inputDir: readStringOption(options, 'input-dir'),
-    bundleId: bundleIdInput.bundleId,
-    bundleFromPackage: readBooleanOption(options, 'bundle-from-package', false),
-    explicitBundleIdSource: bundleIdInput.bundleIdSource,
-    runtimeVersion,
-    platform,
-    target,
-    beforeWrite: async manifest => {
-      const existingBundleCheck = await resolveExistingPublishedBundleCheck({
-        context,
-        options,
-        platform: manifest.platform,
-        runtimeVersion: manifest.runtimeVersion,
-        bundleId: manifest.bundleId,
-      })
+  console.log('')
 
-      warnUnavailableExistingPublishedBundleCheck({
-        check: existingBundleCheck,
-        platform: manifest.platform,
-        runtimeVersion: manifest.runtimeVersion,
-        bundleId: manifest.bundleId,
-      })
-      assertNoExistingPublishedBundle(existingBundleCheck)
-    },
-  })
+  const bundling = createProgressReporter({
+    animated: isInteractiveTerminal(),
+  }).start('Bundling')
+  let result: Awaited<ReturnType<typeof bundleProject>>
+
+  try {
+    result = await bundleProject({
+      cwd: context.cwd,
+      outputDir,
+      inputDir: readStringOption(options, 'input-dir'),
+      bundleId: bundleIdInput.bundleId,
+      bundleFromPackage: readBooleanOption(options, 'bundle-from-package', false),
+      explicitBundleIdSource: bundleIdInput.bundleIdSource,
+      runtimeVersion,
+      platform,
+      target,
+      beforeWrite: async manifest => {
+        const existingBundleCheck = await resolveExistingPublishedBundleCheck({
+          context,
+          options,
+          platform: manifest.platform,
+          runtimeVersion: manifest.runtimeVersion,
+          bundleId: manifest.bundleId,
+        })
+
+        warnUnavailableExistingPublishedBundleCheck({
+          check: existingBundleCheck,
+          platform: manifest.platform,
+          runtimeVersion: manifest.runtimeVersion,
+          bundleId: manifest.bundleId,
+        })
+        assertNoExistingPublishedBundle(existingBundleCheck)
+      },
+    })
+    bundling.succeed()
+  } catch (error) {
+    bundling.fail()
+    throw error
+  }
+
+  console.log('')
+  console.log('✅ Bundle created')
+
+  if (!verbose) {
+    return
+  }
 
   if (result.omittedSourceMapCount > 0) {
     console.log(formatOmittedSourceMapCount(result.omittedSourceMapCount))
@@ -503,8 +532,6 @@ export async function handleBundle(context: CommandContext, options: Record<stri
   console.log(formatBundleIdSource(result.bundleIdSource))
   console.log('')
   printJson(result)
-  console.log('')
-  console.log('✅ Bundle generated')
 }
 
 // -----------------------------------------------------------------------------

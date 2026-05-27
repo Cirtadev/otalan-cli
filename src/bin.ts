@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { parseArgs } from './cli/args'
+import { parseArgs, readBooleanOption } from './cli/args'
 import type { CommandContext } from './cli/helpers'
 import { printHelp } from './cli/output'
 import { handleDoctor, handleInit, handleLogin } from './commands/auth'
@@ -41,7 +41,7 @@ async function main() {
     cwd: process.cwd(),
   }
 
-  if (parsed.options.help === true) {
+  if (readBooleanOption(parsed.options, 'help', false, ['h'])) {
     printHelp(await readCliVersion())
     return
   }

@@ -119,6 +119,16 @@ describe('CLI help', () => {
     expect(result.stderr).toBe('')
   })
 
+  test('login -h prints help text without triggering login prompts', async () => {
+    const result = await runCli(['login', '-h'])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain(`Otalan CLI ${await readPackageVersion()}`)
+    expect(result.stdout).toContain('Usage: otalan <command> [options]')
+    expect(result.stdout).not.toContain('OTA Publish Key:')
+    expect(result.stderr).toBe('')
+  })
+
   test('init --help prints help text without triggering init prompts', async () => {
     const result = await runCli(['init', '--help'])
 

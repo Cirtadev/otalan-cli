@@ -2,6 +2,15 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.5.2 - 2026-05-28
+
+### Changed
+
+- Keep `otalan bundle` output compact by default with publish-style `Bundling` progress and `✅ Bundle created`; detailed bundle context, source-map counts, and JSON output now require `--verbose` or `-v`.
+- Add `-v` as a short alias for verbose publish and bundle output.
+- Print `Bundle selected:` before the rollback bundle summary and `✅ Rollback done` after it.
+- Exit `otalan rollback` without prompting when no bundles are available for the selected tuple.
+
 ## 1.5.1 - 2026-05-26
 
 ### Changed

@@ -63,15 +63,24 @@ export function readStringOption(options: Record<string, string | boolean>, key:
   return typeof value === 'string' ? value : undefined
 }
 
-export function readBooleanOption(options: Record<string, string | boolean>, key: string, fallback = false) {
-  const value = options[key]
+export function readBooleanOption(
+  options: Record<string, string | boolean>,
+  key: string,
+  fallback = false,
+  aliases: string[] = [],
+) {
+  const optionKeys = [key, ...aliases]
 
-  if (typeof value === 'boolean') {
-    return value
-  }
+  for (const optionKey of optionKeys) {
+    const value = options[optionKey]
 
-  if (typeof value === 'string') {
-    return value === 'true'
+    if (typeof value === 'boolean') {
+      return value
+    }
+
+    if (typeof value === 'string') {
+      return value === 'true'
+    }
   }
 
   return fallback
