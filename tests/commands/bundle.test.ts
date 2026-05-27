@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { stdout } from 'node:process'
 
 import { bundleCommandTestUtils, handleBundle } from '../../src/commands/bundle'
 import type { BundleManifest } from '../../src/bundle'
@@ -14,11 +15,16 @@ import type { ReleaseItem } from '../../src/http'
 const originalFetch = globalThis.fetch
 const originalConsoleLog = console.log
 const originalConsoleWarn = console.warn
+const originalStdoutIsTTY = stdout.isTTY
 
 afterEach(() => {
   globalThis.fetch = originalFetch
   console.log = originalConsoleLog
   console.warn = originalConsoleWarn
+  Object.defineProperty(stdout, 'isTTY', {
+    configurable: true,
+    value: originalStdoutIsTTY,
+  })
 })
 
 // -----------------------------------------------------------------------------
@@ -76,6 +82,13 @@ function createReleaseContextResponse() {
   })
 }
 
+function forceStaticProgressOutput() {
+  Object.defineProperty(stdout, 'isTTY', {
+    configurable: true,
+    value: false,
+  })
+}
+
 // -----------------------------------------------------------------------------
 // Bundle command
 // -----------------------------------------------------------------------------
@@ -100,6 +113,7 @@ describe('handleBundle', () => {
         output.push(args.map(String).join(' '))
       }
       console.warn = () => {}
+      forceStaticProgressOutput()
       globalThis.fetch = (async () => {
         throw new Error('Network unavailable.')
       }) as unknown as typeof fetch
@@ -141,6 +155,7 @@ describe('handleBundle', () => {
         output.push(args.map(String).join(' '))
       }
       console.warn = () => {}
+      forceStaticProgressOutput()
       globalThis.fetch = (async () => {
         throw new Error('Network unavailable.')
       }) as unknown as typeof fetch
