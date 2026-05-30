@@ -4,10 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { authCommandTestUtils, handleDoctor, handleInit } from '../../src/commands/auth'
-
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
+import { stripAnsiLines } from '../helpers/ansi'
 
 const originalFetch = globalThis.fetch
 const originalLog = console.log
@@ -16,10 +13,6 @@ afterEach(() => {
   globalThis.fetch = originalFetch
   console.log = originalLog
 })
-
-// -----------------------------------------------------------------------------
-// Doctor command
-// -----------------------------------------------------------------------------
 
 describe('handleDoctor', () => {
   test('checks API connectivity and prints the OTA Publish Key context', async () => {
@@ -58,19 +51,19 @@ describe('handleDoctor', () => {
       'api-url': 'https://api.otalan.com',
     })
 
-    expect(events).toEqual([
-      'Otalan API connection OK.',
-      'API URL: https://api.otalan.com',
-      'Organization: test-org',
-      'Project: test-project',
+    expect(stripAnsiLines(events)).toEqual([
+      '✓ Otalan API connection OK',
+      [
+        '┌──────────────┬────────────────────────┐',
+        '│ API URL      │ https://api.otalan.com │',
+        '│ Organization │ test-org               │',
+        '│ Project      │ test-project           │',
+        '└──────────────┴────────────────────────┘',
+      ].join('\n'),
     ])
     expect(events.join('\n')).not.toContain('test-key')
   })
 })
-
-// -----------------------------------------------------------------------------
-// Init command
-// -----------------------------------------------------------------------------
 
 describe('handleInit', () => {
   test('stores the selected app name in the project config', async () => {
@@ -188,12 +181,14 @@ describe('authCommandTestUtils', () => {
   })
 
   test('marks the interactive OTA Publish Key prompt as secret', async () => {
-    const prompts: Array<{ question: string, secret?: boolean }> = []
+    const prompts: Array<{ fallback?: string, hint?: string, question: string, secret?: boolean }> = []
 
     const input = await authCommandTestUtils.resolveLoginInput(
       {},
       async prompt => {
         prompts.push({
+          fallback: prompt.fallback,
+          hint: prompt.hint,
           question: prompt.question,
           secret: prompt.secret,
         })
@@ -213,14 +208,56 @@ describe('authCommandTestUtils', () => {
     })
     expect(prompts).toEqual([
       {
+        fallback: 'https://api.otalan.com',
+        hint: 'API base URL. Otalan default: https://api.otalan.com.',
         question: 'Otalan API URL',
         secret: undefined,
       },
       {
+        fallback: undefined,
+        hint: 'Project OTA Publish Key for publish, rollback, status, and bundle listing. Do not use an OTA App Key.',
         question: 'OTA Publish Key',
         secret: true,
       },
     ])
+  })
+
+  test('shows the masked stored OTA Publish Key without a redundant keep hint', async () => {
+    const prompts: Array<{ fallback?: string, hint?: string, question: string, secret?: boolean }> = []
+
+    const input = await authCommandTestUtils.resolveLoginInput(
+      {},
+      async prompt => {
+        prompts.push({
+          fallback: prompt.fallback,
+          hint: prompt.hint,
+          question: prompt.question,
+          secret: prompt.secret,
+        })
+
+        return prompt.question === 'Otalan API URL'
+          ? 'https://api.otalan.com'
+          : ''
+      },
+      async () => ({
+        apiUrl: 'https://api.otalan.com',
+        apiKey: 'otalan_ci_1234567890abcdef',
+      }),
+    )
+
+    expect(input).toEqual({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'otalan_ci_1234567890abcdef',
+    })
+    expect(prompts.at(1)).toEqual({
+      fallback: undefined,
+      hint: [
+        'Project OTA Publish Key for publish, rollback, status, and bundle listing. Do not use an OTA App Key.',
+        'Current OTA Publish Key: otalan_ci_...cdef',
+      ].join('\n'),
+      question: 'OTA Publish Key',
+      secret: true,
+    })
   })
 
   test('validates login credentials before saving them', async () => {

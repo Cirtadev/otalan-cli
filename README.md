@@ -265,13 +265,12 @@ The `--kind` values and generated key prefixes keep the existing internal API id
 Output includes both the full Otalan key and the base64url suffix without the `otalan_ci_` or `otalan_ota_` prefix:
 
 ```text
-Generated OTA Publish Key.
+✓ Generated OTA Publish Key
 
-Full key:
-otalan_ci_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-Key without prefix:
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+┌────────────────┬────────────────────────────────────────────┐
+│ Full key       │ otalan_ci_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx │
+│ Without prefix │ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx           │
+└────────────────┴────────────────────────────────────────────┘
 ```
 
 `otalan keygen` only creates local key material. Importing or activating a key should still happen through an authenticated dashboard flow; an existing OTA Publish Key should not be able to create more keys. OTA App Keys are intended for embedded app update checks and should not be shared or used as CLI credentials.
@@ -280,12 +279,14 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Saves the project OTA Publish Key and API base URL locally.
 
-If auth is already saved, `otalan login` shows the current API URL as the prompt default and shows the current OTA Publish Key in masked form. Press Enter to keep either value.
+Otalan's default API URL is `https://api.otalan.com`. Only pass `--api-url` for self-hosted or non-production API environments.
+
+If auth is already saved, `otalan login` shows the current API URL as the prompt default and shows the current OTA Publish Key in masked form.
 
 During interactive login, typed OTA Publish Key characters are echoed as `*` so the terminal shows input progress without exposing the key.
 
 ```bash
-otalan login --api-key otalan_ci_xxx --api-url https://api.otalan.com
+otalan login --api-key otalan_ci_xxx
 ```
 
 ### `otalan doctor`
@@ -350,8 +351,8 @@ Current behavior:
 - Expo does not require a prebuilt `dist/` or `www/` folder
 - Expo stores the generated Otalan satellite manifest in `.otalan/bundle/manifest.json`, including `launchAsset`, `assets`, `runtimeVersion`, `bundleId`, and `expoConfig`
 - both outputs produce a ZIP plus `manifest.json`
-- default output shows compact bundle progress with publish-style status icons, ends with `✅ Bundle created`, and prints the generated bundle folder
-- `--verbose` or `-v` prints the linked project/app, Capacitor build reminder, source-map omitted count, bundle ID source, and JSON bundle result
+- default output uses colorized compact terminal UI symbols, shows animated status icons in interactive terminals, ends with `✓ Bundle created`, and prints the generated bundle folder as a compact table
+- `--verbose` or `-v` prints the linked project/app, streams Expo subprocess output, shows the Capacitor build reminder, source-map omitted count, bundle ID source, and JSON bundle result
 - source map files (`*.map`) are omitted from bundle ZIPs by default
 - native project/source files are rejected before bundle output is written; OTA bundles must only contain generated web/update assets
 - when `otalan login` and `otalan init` are configured, the CLI checks that the selected `bundleId` is not already published for the selected platform, runtimeVersion, and channel before writing bundle output
@@ -432,7 +433,7 @@ Current behavior:
 - `--rollout-percent` accepts an integer from `0` to `100`
 - `--optional` marks the update as non-mandatory
 - `--release-notes` attaches release notes to the published bundle
-- default output shows compact publish progress with animated terminal status icons; `--verbose` or `-v` prints the full project, release, and ingest details
+- default output shows the app, bundle, platform/channel/runtime tuple, rollout, archive, and validation result, then ends with `✓ Release is Live`; `--verbose` or `-v` also prints the full project and ingest details as compact tables
 - Expo publish forwards the full generated Otalan satellite manifest when present
 - Expo publish sends the generated manifest with `runtimeVersion`
 - Expo manifests include the Expo config captured from `bunx expo config --json`; avoid placing secrets in Expo config fields that are not intended to be uploaded
@@ -481,7 +482,7 @@ otalan channels --app-id com.example.app
 
 When `--app-id` is omitted in an interactive terminal, the CLI prompts for an app filter with `All` selected by default. Non-interactive runs default to `All`.
 
-The command uses `GET /v1/releases/channels`, optionally with `?appId=...`, and prints each returned channel with the apps that use it:
+The command uses `GET /v1/releases/channels`, optionally with `?appId=...`, and prints each returned channel with the apps that use it in a compact table:
 
 ```json
 {
@@ -500,9 +501,9 @@ The command uses `GET /v1/releases/channels`, optionally with `?appId=...`, and 
 
 Lists remote bundles for the current app so you can choose a bundle for rollback or rollout operations.
 
-Remote bundle tables display the API `publishedAt` timestamp, not the bundle row `createdAt` timestamp.
+Remote bundle tables are colorized and display the API `publishedAt` timestamp, not the bundle row `createdAt` timestamp.
 
-In interactive terminals, the active bundle row is highlighted in green.
+The active bundle row is highlighted in green.
 
 Default resolution order:
 
@@ -520,12 +521,13 @@ otalan bundles --platform ios --channel production
 Reactivates an older bundle for the same tuple.
 
 `rollback` uses the same runtime-version default order as `bundles`. Pass `--runtime-version` if you want to override the detected default.
+If `--bundle-id` is omitted, interactive terminals show a selectable bundle list. The current live bundle is highlighted in green and disabled; deleted or unavailable archives are also disabled.
 
 ```bash
 otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
 ```
 
-When no bundles exist for the selected platform, channel, and runtimeVersion, `otalan rollback` exits without prompting for a target bundle. Successful rollbacks print `Bundle selected:`, the selected bundle summary, and then `✅ Rollback done`.
+When no bundles exist for the selected platform, channel, and runtimeVersion, `otalan rollback` exits without prompting for a target bundle. Successful rollbacks print `Bundle selected`, the selected bundle summary, and then `✓ Rollback done`.
 
 ### `otalan pause`
 
@@ -620,6 +622,8 @@ bun pm pack --dry-run
 ## Notes
 
 - This is a Bun-based CLI published on npm.
+- Terminal prompts, loading indicators, and interactive status rendering use `@clack/prompts`; command summaries and list commands use compact colorized tables.
+- Set `OTALAN_NO_COLOR=1` if you need plain, non-colorized logs.
 - Expo bundling uses `bunx expo ...`.
 - Default API URL is `https://api.otalan.com`.
 - Publishing, rollback, status, and `bundles` expect an OTA Publish Key and an active app.

@@ -3,6 +3,7 @@
 import { parseArgs, readBooleanOption } from './cli/args'
 import type { CommandContext } from './cli/helpers'
 import { printHelp } from './cli/output'
+import { formatError } from './cli/ui'
 import { handleDoctor, handleInit, handleLogin } from './commands/auth'
 import { handleBundle } from './commands/bundle'
 import { handleKeygen } from './commands/keygen'
@@ -15,10 +16,6 @@ import {
   handleRollback,
   handleStatus,
 } from './commands/release'
-
-// -----------------------------------------------------------------------------
-// Entrypoint
-// -----------------------------------------------------------------------------
 
 interface PackageMetadata {
   version?: unknown
@@ -112,15 +109,11 @@ function formatFatalError(error: unknown) {
   if (error instanceof Error) {
     return process.env.OTALAN_DEBUG === '1'
       ? error.stack ?? error.message
-      : error.message
+      : formatError(error.message)
   }
 
-  return error
+  return formatError(String(error))
 }
-
-// -----------------------------------------------------------------------------
-// Process bootstrap
-// -----------------------------------------------------------------------------
 
 ;(async () => {
   try {

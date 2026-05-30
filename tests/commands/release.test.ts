@@ -1,88 +1,28 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdir, writeFile } from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
+import { describe, expect, test } from 'bun:test'
 
-import type { BundleIngestItem, ReleaseItem } from '../../src/http'
 import {
-  handleChannelsList,
-  handlePause,
-  handleResume,
+  handleBundlesList,
   handleRollback,
   handleStatus,
   releaseTestUtils,
 } from '../../src/commands/release'
-
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
-
-const originalFetch = globalThis.fetch
-const originalConsoleLog = console.log
-
-afterEach(() => {
-  globalThis.fetch = originalFetch
-  console.log = originalConsoleLog
-})
-
-// -----------------------------------------------------------------------------
-// Fixtures
-// -----------------------------------------------------------------------------
-
-function createIngest(overrides: Partial<BundleIngestItem> = {}): BundleIngestItem {
-  return {
-    id: 'ingest-123',
-    appId: 'com.example.app',
-    platform: 'ios',
-    channel: 'production',
-    runtimeVersion: '1.0.0',
-    bundleId: '1.0.0-web.2',
-    releaseStorageId: 'release-storage-123',
-    status: 'pending',
-    failureReason: null,
-    checksum: null,
-    mandatory: true,
-    rolloutPercent: 100,
-    releaseNotes: null,
-    fileSizeBytes: 1234,
-    processedAt: null,
-    createdAt: '2026-04-21T00:00:00.000Z',
-    ...overrides,
-  }
-}
-
-function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
-  return {
-    id: 'release-123',
-    projectId: 'project-123',
-    appId: 'com.example.app',
-    platform: 'ios',
-    channel: 'production',
-    runtimeVersion: '1.0.0',
-    bundleId: '1.0.0-web.1',
-    releaseStorageId: 'release-storage-123',
-    checksum: 'abc123',
-    mandatory: true,
-    rolloutPercent: 100,
-    rolloutState: 'complete',
-    releaseNotes: null,
-    fileSizeBytes: 1234,
-    storageObjectExists: true,
-    isActive: false,
-    publishedAt: '2026-04-21T00:00:00.000Z',
-    resolvedDownloadUrl: 'https://cdn.example.com/ios.zip',
-    ...overrides,
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Rollback command
-// -----------------------------------------------------------------------------
+import {
+  createProjectFixture,
+  createRelease,
+  createReleaseContextResponse,
+} from './release.fixtures'
+import { stripAnsi, stripAnsiLines } from '../helpers/ansi'
 
 describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
-  test('prints available bundles before prompting for the target bundle ID', async () => {
+  test('prompts for rollback bundles with a selectable list', async () => {
     const originalLog = console.log
     const events: string[] = []
+    const prompts: Array<{
+      fallback?: string
+      hint: string
+      options: ReadonlyArray<{ disabled?: boolean, hint?: string, label: string, value: string }>
+      question: string
+    }> = []
 
     console.log = (...values: unknown[]) => {
       events.push(values.map(String).join(' '))
@@ -98,21 +38,49 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
             publishedAt: '2026-04-22T00:00:00.000Z',
           }),
           createRelease(),
+          createRelease({
+            bundleId: '1.0.0-web.0',
+            resolvedDownloadUrl: null,
+            storageObjectExists: false,
+          }),
         ],
-        promptTargetBundleId: async example => {
-          events.push(`PROMPT ${example}`)
+        selectTargetBundleId: async prompt => {
+          prompts.push(prompt)
           return '1.0.0-web.1'
         },
       })
 
       expect(targetBundleId).toBe('1.0.0-web.1')
-      expect(events).toContain('Available bundles')
-      expect(events.some(event => event.includes('bundleId'))).toBe(true)
-      expect(events.some(event => event.includes('publishedAt'))).toBe(true)
-      expect(events.some(event => event.includes('2026-04-22 00:00:00'))).toBe(true)
-      expect(events.some(event => event.includes('1.0.0-web.2'))).toBe(true)
-      expect(events.some(event => event.includes('1.0.0-web.1'))).toBe(true)
-      expect(events.indexOf('Available bundles')).toBeLessThan(events.indexOf('PROMPT 1.0.0-web.2'))
+      expect(events).toEqual([])
+      expect(prompts).toHaveLength(1)
+      expect(prompts[0]?.fallback).toBe('1.0.0-web.1')
+      expect(prompts[0]?.hint).toBe(
+        'Select a previous bundle with an available archive. The current live bundle and deleted archives are disabled.',
+      )
+      expect(prompts[0]?.question).toBe('Bundle to reactivate')
+      expect(prompts[0]?.options.map(option => ({
+        ...option,
+        label: stripAnsi(option.label),
+      }))).toEqual([
+        {
+          disabled: true,
+          hint: 'ios/production, runtime 1.0.0, mandatory, current live bundle',
+          label: '1.0.0-web.2 | Current Live | 100% | 2026-04-22 00:00:00',
+          value: '1.0.0-web.2',
+        },
+        {
+          hint: 'ios/production, runtime 1.0.0, mandatory, available rollback target',
+          label: '1.0.0-web.1 | Rollback target | 100% | 2026-04-21 00:00:00',
+          value: '1.0.0-web.1',
+        },
+        {
+          disabled: true,
+          hint: 'ios/production, runtime 1.0.0, mandatory, archive unavailable',
+          label: '1.0.0-web.0 | Archive unavailable | 100% | 2026-04-21 00:00:00',
+          value: '1.0.0-web.0',
+        },
+      ])
+      expect(prompts[0]?.options[0]?.label).toContain('\x1B[32m')
     } finally {
       console.log = originalLog
     }
@@ -134,7 +102,7 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
         releases: [
           createRelease(),
         ],
-        promptTargetBundleId: async () => {
+        selectTargetBundleId: async () => {
           throw new Error('Prompt should not be called.')
         },
       })
@@ -145,43 +113,24 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
       console.log = originalLog
     }
   })
-})
 
-// -----------------------------------------------------------------------------
-// Release context output
-// -----------------------------------------------------------------------------
-
-async function createProjectFixture() {
-  const cwd = path.join(os.tmpdir(), `otalan-cli-release-${crypto.randomUUID()}`)
-
-  await mkdir(cwd, { recursive: true })
-  await writeFile(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
-    organizationSlug: 'test-org',
-    projectSlug: 'mobile-app',
-    appName: 'Customer Portal',
-    appId: 'com.example.app',
-  }, null, 2)}\n`)
-
-  return cwd
-}
-
-function createReleaseContextResponse() {
-  return new Response(JSON.stringify({
-    item: {
-      organizationId: 'org-123',
-      organizationName: 'Test Organization',
-      organizationSlug: 'test-org',
-      projectId: 'project-123',
-      projectName: 'Mobile App',
-      projectSlug: 'mobile-app',
-    },
-  }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  test('rejects rollback prompts when no bundle archive is selectable', async () => {
+    await expect(releaseTestUtils.resolveRollbackTargetBundleId({
+      options: {},
+      releases: [
+        createRelease({
+          resolvedDownloadUrl: null,
+          storageObjectExists: false,
+        }),
+      ],
+      selectTargetBundleId: async () => {
+        throw new Error('Prompt should not be called.')
+      },
+    })).rejects.toThrow(
+      'No previous rollback bundle archives are available for the selected platform, channel, and runtimeVersion.',
+    )
   })
-}
+})
 
 describe('handleRollback', () => {
   test('exits without prompting when no bundles are available', async () => {
@@ -226,9 +175,11 @@ describe('handleRollback', () => {
       'GET /v1/releases/context',
       'GET /v1/releases',
     ])
-    expect(output.at(-2)).toBe('')
-    expect(output).toContain('No bundles found for the selected platform, channel, and runtimeVersion.')
-    expect(output).not.toContain('Available bundles')
+    const cleanOutput = stripAnsiLines(output)
+
+    expect(cleanOutput.at(-2)).toBe('')
+    expect(cleanOutput).toContain('i No bundles found for the selected platform, channel, and runtimeVersion.')
+    expect(cleanOutput).not.toContain('Available bundles')
   })
 
   test('prints a checked rollback done message', async () => {
@@ -301,12 +252,14 @@ describe('handleRollback', () => {
       'GET /v1/releases',
       'POST /v1/releases/rollback',
     ])
-    const joinedOutput = output.join('\n')
+    const cleanOutput = stripAnsiLines(output)
+    const joinedOutput = cleanOutput.join('\n')
 
-    expect(joinedOutput).toContain('\nBundle selected:\nBundle ID: 1.0.0-web.1')
-    expect(output.at(-1)).toBe('✅ Rollback done')
-    expect(output).not.toContain('Rollback applied.')
-    expect(joinedOutput.indexOf('Bundle selected:')).toBeLessThan(joinedOutput.indexOf('✅ Rollback done'))
+    expect(joinedOutput).toContain('\nBundle selected\n')
+    expect(joinedOutput).toContain('│ Bundle ID       │ 1.0.0-web.1')
+    expect(cleanOutput.at(-1)).toBe('✓ Rollback done')
+    expect(cleanOutput).not.toContain('Rollback applied.')
+    expect(joinedOutput.indexOf('Bundle selected')).toBeLessThan(joinedOutput.indexOf('✓ Rollback done'))
   })
 })
 
@@ -378,18 +331,21 @@ describe('release command context output', () => {
     })
 
     expect(requestedPaths[0]).toBe('/v1/releases/context')
-    expect(output).toContain('Organization: Test Organization (test-org)')
-    expect(output).toContain('Project: Mobile App (mobile-app)')
-    expect(output).toContain('App: Customer Portal (com.example.app)')
+    const cleanOutput = stripAnsiLines(output)
+    const joinedOutput = cleanOutput.join('\n')
+    const contextBottomIndex = cleanOutput.findIndex(line => line.startsWith('└──────────────'))
+
+    expect(cleanOutput[contextBottomIndex + 1]).toBe('')
+    expect(cleanOutput[contextBottomIndex + 2]).toBe('Active bundle')
+    expect(joinedOutput).toContain('│ Organization │ Test Organization (test-org)')
+    expect(joinedOutput).toContain('│ Project      │ Mobile App (mobile-app)')
+    expect(joinedOutput).toContain('│ App          │ Customer Portal (com.example.app) │')
   })
 })
 
-// -----------------------------------------------------------------------------
-// Channels command
-// -----------------------------------------------------------------------------
-
-describe('handleChannelsList', () => {
-  test('lists project channels through the channels endpoint', async () => {
+describe('handleBundlesList', () => {
+  test('lists remote bundles for the selected release tuple', async () => {
+    const cwd = await createProjectFixture()
     const output: string[] = []
     const requestedPaths: string[] = []
 
@@ -409,318 +365,19 @@ describe('handleChannelsList', () => {
         return createReleaseContextResponse()
       }
 
-      if (url.pathname === '/v1/releases/channels') {
-        expect(url.search).toBe('')
-        return new Response(JSON.stringify({
-          items: [
-            {
-              channel: 'production',
-              apps: [
-                {
-                  appId: 'com.example.app',
-                  name: 'Example App',
-                },
-              ],
-            },
-            {
-              channel: 'staging',
-              apps: [
-                {
-                  appId: 'com.example.staging',
-                  name: 'Staging App',
-                },
-              ],
-            },
-          ],
-        }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      }
-
-      throw new Error(`Unexpected request: ${url.pathname}`)
-    }) as typeof fetch
-
-    await handleChannelsList({
-      'api-key': 'test-key',
-    }, {
-      isInteractive: () => false,
-    })
-
-    expect(requestedPaths).toEqual([
-      '/v1/releases/context',
-      '/v1/releases/channels',
-    ])
-    expect(output).toContain('Organization: Test Organization (test-org)')
-    expect(output).toContain('Project: Mobile App (mobile-app)')
-    expect(output.join('\n')).toContain('production')
-    expect(output.join('\n')).toContain('Example App (com.example.app)')
-    expect(output.join('\n')).toContain('staging')
-    expect(output.join('\n')).toContain('Staging App (com.example.staging)')
-  })
-
-  test('passes an explicit appId filter to the channels endpoint', async () => {
-    const requestedPaths: string[] = []
-
-    console.log = () => {}
-
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input))
-      requestedPaths.push(`${url.pathname}${url.search}`)
-
-      expect(init?.headers).toEqual({
-        'x-api-key': 'test-key',
-      })
-
-      if (url.pathname === '/v1/releases/context') {
-        return createReleaseContextResponse()
-      }
-
-      if (url.pathname === '/v1/releases/channels') {
-        return new Response(JSON.stringify({
-          items: [],
-        }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      }
-
-      throw new Error(`Unexpected request: ${url.pathname}`)
-    }) as typeof fetch
-
-    await handleChannelsList({
-      'api-key': 'test-key',
-      'app-id': 'com.example.app',
-    })
-
-    expect(requestedPaths).toEqual([
-      '/v1/releases/context',
-      '/v1/releases/channels?appId=com.example.app',
-    ])
-  })
-})
-
-describe('releaseTestUtils.resolveChannelsAppId', () => {
-  test('uses explicit appId without prompting', async () => {
-    await expect(releaseTestUtils.resolveChannelsAppId({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      options: {
-        'app-id': 'com.example.app',
-      },
-      isInteractive: () => {
-        throw new Error('Interactivity should not be checked.')
-      },
-    })).resolves.toBe('com.example.app')
-  })
-
-  test('defaults to all apps in non-interactive environments', async () => {
-    await expect(releaseTestUtils.resolveChannelsAppId({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      options: {},
-      isInteractive: () => false,
-      loadApps: async () => {
-        throw new Error('Apps should not be loaded.')
-      },
-    })).resolves.toBeUndefined()
-  })
-
-  test('offers All first as the interactive default', async () => {
-    const promptInputs: unknown[] = []
-
-    await expect(releaseTestUtils.resolveChannelsAppId({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      options: {},
-      isInteractive: () => true,
-      loadApps: async () => [
-        {
-          appId: 'com.example.app',
-          name: 'Example App',
-        },
-      ],
-      selectAppId: async input => {
-        promptInputs.push(input)
-        return input.fallback
-      },
-    })).resolves.toBeUndefined()
-
-    expect(promptInputs).toEqual([
-      {
-        question: 'App',
-        fallback: '__all__',
-        hint: 'Filter channels by app, or keep All to show every project channel.',
-        options: [
-          {
-            label: 'All',
-            value: '__all__',
-          },
-          {
-            label: 'Example App (com.example.app)',
-            value: 'com.example.app',
-          },
-        ],
-      },
-    ])
-  })
-
-  test('returns the selected app in interactive environments', async () => {
-    await expect(releaseTestUtils.resolveChannelsAppId({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      options: {},
-      isInteractive: () => true,
-      loadApps: async () => [
-        {
-          appId: 'com.example.app',
-          name: 'Example App',
-        },
-      ],
-      selectAppId: async () => 'com.example.app',
-    })).resolves.toBe('com.example.app')
-  })
-})
-
-// -----------------------------------------------------------------------------
-// Rollout state commands
-// -----------------------------------------------------------------------------
-
-describe('handlePause', () => {
-  test('pauses the active rollout for the selected tuple', async () => {
-    const cwd = await createProjectFixture()
-    const output: string[] = []
-    const requestedPaths: string[] = []
-
-    console.log = (...args: unknown[]) => {
-      output.push(args.map(String).join(' '))
-    }
-
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input))
-      requestedPaths.push(`${init?.method ?? 'GET'} ${url.pathname}`)
-
-      if (url.pathname === '/v1/releases/context') {
-        return createReleaseContextResponse()
-      }
-
-      if (url.pathname === '/v1/releases/pause') {
-        expect(init?.headers).toEqual({
-          'x-api-key': 'test-key',
-          'Content-Type': 'application/json',
-        })
-        expect(JSON.parse(init?.body as string)).toEqual({
-          appId: 'com.example.app',
-          platform: 'ios',
-          channel: 'production',
-          runtimeVersion: '1.0.0',
-        })
+      if (url.pathname === '/v1/releases') {
+        expect(url.searchParams.get('appId')).toBe('com.example.app')
+        expect(url.searchParams.get('platform')).toBe('ios')
+        expect(url.searchParams.get('channel')).toBe('production')
+        expect(url.searchParams.get('runtimeVersion')).toBe('1.0.0')
 
         return new Response(JSON.stringify({
-          item: createRelease({
-            isActive: true,
-            rolloutState: 'paused',
-          }),
-        }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      }
-
-      throw new Error(`Unexpected request: ${url.pathname}`)
-    }) as typeof fetch
-
-    await handlePause({ cwd }, {
-      'api-key': 'test-key',
-      platform: 'ios',
-      channel: 'production',
-      'runtime-version': '1.0.0',
-    })
-
-    expect(requestedPaths).toEqual([
-      'GET /v1/releases/context',
-      'POST /v1/releases/pause',
-    ])
-    expect(output).toContain('Rollout paused.')
-    expect(output.join('\n')).toContain('State: paused')
-  })
-
-  test('surfaces the API error when no active bundle exists', async () => {
-    const cwd = await createProjectFixture()
-
-    console.log = () => {}
-
-    globalThis.fetch = (async (input) => {
-      const url = new URL(String(input))
-
-      if (url.pathname === '/v1/releases/context') {
-        return createReleaseContextResponse()
-      }
-
-      if (url.pathname === '/v1/releases/pause') {
-        return new Response(JSON.stringify({
-          message: 'No active bundle found for the selected release tuple',
-        }), {
-          status: 404,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      }
-
-      throw new Error(`Unexpected request: ${url.pathname}`)
-    }) as typeof fetch
-
-    await expect(handlePause({ cwd }, {
-      'api-key': 'test-key',
-      platform: 'ios',
-      channel: 'production',
-      'runtime-version': '1.0.0',
-    })).rejects.toThrow('No active bundle found for the selected release tuple')
-  })
-})
-
-describe('handleResume', () => {
-  test('resumes the active rollout for the selected tuple', async () => {
-    const cwd = await createProjectFixture()
-    const output: string[] = []
-    const requestedPaths: string[] = []
-
-    console.log = (...args: unknown[]) => {
-      output.push(args.map(String).join(' '))
-    }
-
-    globalThis.fetch = (async (input, init) => {
-      const url = new URL(String(input))
-      requestedPaths.push(`${init?.method ?? 'GET'} ${url.pathname}`)
-
-      if (url.pathname === '/v1/releases/context') {
-        return createReleaseContextResponse()
-      }
-
-      if (url.pathname === '/v1/releases/resume') {
-        expect(init?.headers).toEqual({
-          'x-api-key': 'test-key',
-          'Content-Type': 'application/json',
-        })
-        expect(JSON.parse(init?.body as string)).toEqual({
-          appId: 'com.example.app',
-          platform: 'ios',
-          channel: 'production',
-          runtimeVersion: '1.0.0',
-        })
-
-        return new Response(JSON.stringify({
-          item: createRelease({
+          items: [createRelease({
+            bundleId: '1.0.0-web.2',
             isActive: true,
             rolloutState: 'active',
-          }),
+            resolvedDownloadUrl: 'https://cdn.example.com/bundle.zip',
+          })],
         }), {
           status: 200,
           headers: {
@@ -732,7 +389,7 @@ describe('handleResume', () => {
       throw new Error(`Unexpected request: ${url.pathname}`)
     }) as typeof fetch
 
-    await handleResume({ cwd }, {
+    await handleBundlesList({ cwd }, {
       'api-key': 'test-key',
       platform: 'ios',
       channel: 'production',
@@ -740,106 +397,14 @@ describe('handleResume', () => {
     })
 
     expect(requestedPaths).toEqual([
-      'GET /v1/releases/context',
-      'POST /v1/releases/resume',
+      '/v1/releases/context',
+      '/v1/releases?appId=com.example.app&platform=ios&channel=production&runtimeVersion=1.0.0',
     ])
-    expect(output).toContain('Rollout resumed.')
-    expect(output.join('\n')).toContain('State: active')
-  })
-})
+    const joinedOutput = stripAnsiLines(output).join('\n')
 
-// -----------------------------------------------------------------------------
-// Ingest polling
-// -----------------------------------------------------------------------------
-
-describe('releaseTestUtils.waitForReleaseIngest', () => {
-  test('waits until the ingest reaches ready', async () => {
-    const observedStatuses: string[] = []
-    const clock = { now: 0 }
-
-    const completed = await releaseTestUtils.waitForReleaseIngest({
-      ingest: createIngest(),
-      loadIngest: async () => {
-        if (observedStatuses.length === 0) {
-          return createIngest({
-            status: 'processing',
-          })
-        }
-
-        return createIngest({
-          status: 'ready',
-          checksum: 'abc123',
-          processedAt: '2026-04-21T00:00:03.000Z',
-        })
-      },
-      onStatusChange: ingest => {
-        observedStatuses.push(ingest.status)
-      },
-      pollIntervalMs: 1,
-      timeoutMs: 10,
-      sleep: async () => {
-        clock.now += 1
-      },
-      now: () => clock.now,
-    })
-
-    expect(observedStatuses).toEqual(['processing', 'ready'])
-    expect(completed.status).toBe('ready')
-    expect(completed.checksum).toBe('abc123')
-  })
-
-  test('returns the failed ingest so callers can surface the failure reason', async () => {
-    const failed = await releaseTestUtils.waitForReleaseIngest({
-      ingest: createIngest(),
-      loadIngest: async () =>
-        createIngest({
-          status: 'failed',
-          failureReason: 'Checksum mismatch',
-          processedAt: '2026-04-21T00:00:02.000Z',
-        }),
-      pollIntervalMs: 1,
-      timeoutMs: 10,
-      sleep: async () => undefined,
-      now: () => 0,
-    })
-
-    expect(failed.status).toBe('failed')
-    expect(failed.failureReason).toBe('Checksum mismatch')
-  })
-
-  test('times out when the ingest never reaches a terminal state', async () => {
-    const clock = { now: 0 }
-
-    await expect(releaseTestUtils.waitForReleaseIngest({
-      ingest: createIngest(),
-      loadIngest: async () =>
-        createIngest({
-          status: 'processing',
-        }),
-      pollIntervalMs: 2,
-      timeoutMs: 5,
-      sleep: async (ms: number) => {
-        clock.now += ms
-      },
-      now: () => clock.now,
-    })).rejects.toThrow('Timed out waiting for release validation. Ingest ingest-123 is still processing.')
-  })
-})
-
-describe('releaseTestUtils.resolveRolloutPercent', () => {
-  test('defaults to 100 when the option is omitted', () => {
-    expect(releaseTestUtils.resolveRolloutPercent({})).toBe(100)
-  })
-
-  test('accepts integer percentages in range', () => {
-    expect(releaseTestUtils.resolveRolloutPercent({
-      'rollout-percent': '25',
-    })).toBe(25)
-  })
-
-  test('rejects fractional percentages before calling the API', () => {
-    expect(() => releaseTestUtils.resolveRolloutPercent({
-      'rollout-percent': '25.5',
-    })).toThrow('rollout-percent must be an integer between 0 and 100.')
+    expect(joinedOutput).toContain('│ Organization │ Test Organization (test-org)')
+    expect(joinedOutput).toContain('bundleId')
+    expect(joinedOutput).toContain('1.0.0-web.2')
+    expect(joinedOutput).toContain('active')
   })
 })

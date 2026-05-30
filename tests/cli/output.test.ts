@@ -9,10 +9,7 @@ import {
   printChannelsTable,
 } from '../../src/cli/output'
 import type { ReleaseContext, ReleaseItem } from '../../src/http'
-
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
+import { stripAnsi, stripAnsiLines } from '../helpers/ansi'
 
 const originalConsoleLog = console.log
 const originalStdoutIsTTY = stdout.isTTY
@@ -24,10 +21,6 @@ afterEach(() => {
     value: originalStdoutIsTTY,
   })
 })
-
-// -----------------------------------------------------------------------------
-// Fixtures
-// -----------------------------------------------------------------------------
 
 function createReleaseContext(overrides: Partial<ReleaseContext> = {}): ReleaseContext {
   return {
@@ -65,64 +58,68 @@ function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Release context output
-// -----------------------------------------------------------------------------
-
 describe('formatReleaseContextSummary', () => {
-  test('formats organization and project as two distinct lines', () => {
-    expect(formatReleaseContextSummary(createReleaseContext())).toBe([
-      'Organization: Test Organization (test-org)',
-      'Project: Mobile App (mobile-app)',
+  test('formats organization and project as a compact table', () => {
+    expect(stripAnsi(formatReleaseContextSummary(createReleaseContext()))).toBe([
+      '┌──────────────┬──────────────────────────────┐',
+      '│ Organization │ Test Organization (test-org) │',
+      '│ Project      │ Mobile App (mobile-app)      │',
+      '└──────────────┴──────────────────────────────┘',
     ].join('\n'))
   })
 
   test('omits duplicate slugs when names and slugs match', () => {
-    expect(formatReleaseContextSummary(createReleaseContext({
+    expect(stripAnsi(formatReleaseContextSummary(createReleaseContext({
       organizationName: 'test-org',
       projectName: 'mobile-app',
-    }))).toBe([
-      'Organization: test-org',
-      'Project: mobile-app',
+    })))).toBe([
+      '┌──────────────┬────────────┐',
+      '│ Organization │ test-org   │',
+      '│ Project      │ mobile-app │',
+      '└──────────────┴────────────┘',
     ].join('\n'))
   })
 
   test('includes the selected app when provided', () => {
-    expect(formatReleaseContextSummary(createReleaseContext(), {
+    expect(stripAnsi(formatReleaseContextSummary(createReleaseContext(), {
       name: 'Customer Portal',
       appId: 'com.example.app',
-    })).toBe([
-      'Organization: Test Organization (test-org)',
-      'Project: Mobile App (mobile-app)',
-      'App: Customer Portal (com.example.app)',
+    }))).toBe([
+      '┌──────────────┬───────────────────────────────────┐',
+      '│ Organization │ Test Organization (test-org)      │',
+      '│ Project      │ Mobile App (mobile-app)           │',
+      '│ App          │ Customer Portal (com.example.app) │',
+      '└──────────────┴───────────────────────────────────┘',
     ].join('\n'))
   })
 })
 
 describe('formatProjectConfigSummary', () => {
   test('prints the locally linked project and app', () => {
-    expect(formatProjectConfigSummary({
+    expect(stripAnsi(formatProjectConfigSummary({
       organizationSlug: 'test-org',
       projectSlug: 'mobile-app',
       appName: 'Customer Portal',
       appId: 'com.example.app',
-    })).toBe([
-      'Organization: test-org',
-      'Project: mobile-app',
-      'App: Customer Portal (com.example.app)',
+    }))).toBe([
+      '┌──────────────┬───────────────────────────────────┐',
+      '│ Organization │ test-org                          │',
+      '│ Project      │ mobile-app                        │',
+      '│ App          │ Customer Portal (com.example.app) │',
+      '└──────────────┴───────────────────────────────────┘',
     ].join('\n'))
   })
 })
 
 describe('formatBundleSummary', () => {
   test('prints the bundle publishedAt timestamp', () => {
-    expect(formatBundleSummary({
+    expect(stripAnsi(formatBundleSummary({
       bundleId: '1.0.0-web.2',
       platform: 'ios',
       channel: 'production',
       runtimeVersion: '1.0.0',
       publishedAt: '2026-04-22T00:00:00.000Z',
-    })).toContain('Published at: 2026-04-22T00:00:00.000Z')
+    }))).toContain('│ Published at    │ 2026-04-22T00:00:00.000Z │')
   })
 })
 
@@ -150,13 +147,14 @@ describe('printBundlesTable', () => {
     ])
 
     const output = lines.join('\n')
-    const activeLine = lines.find(line => line.includes('active-bundle'))
-    const inactiveLine = lines.find(line => line.includes('inactive-bundle'))
+    const tableLines = output.split('\n')
+    const activeLine = tableLines.find(line => line.includes('active-bundle'))
+    const inactiveLine = tableLines.find(line => line.includes('inactive-bundle'))
 
     expect(activeLine?.startsWith('\x1B[32m')).toBe(true)
     expect(activeLine?.endsWith('\x1B[0m')).toBe(true)
     expect(inactiveLine?.startsWith('\x1B[32m')).toBe(false)
-    expect(output).toContain('inactive-bundle')
+    expect(stripAnsi(output)).toContain('inactive-bundle')
   })
 
   test('marks truncated cells with an ellipsis', () => {
@@ -172,7 +170,7 @@ describe('printBundlesTable', () => {
       }),
     ])
 
-    expect(lines.join('\n')).toContain('bundle-id-that-is-longer-than-t…')
+    expect(stripAnsi(lines.join('\n'))).toContain('bundle-id-that-is-longer-than-t…')
   })
 })
 
@@ -214,13 +212,15 @@ describe('printChannelsTable', () => {
       },
     ])
 
-    expect(lines.join('\n')).toContain('channel')
-    expect(lines.join('\n')).toContain('apps')
-    expect(lines.join('\n')).toContain('production')
-    expect(lines.join('\n')).toContain('Example App (com.example.app)')
-    expect(lines.join('\n')).toContain(longApp)
-    expect(lines.join('\n')).not.toContain('…')
-    expect(lines.join('\n')).toContain('staging')
+    const output = stripAnsi(lines.join('\n'))
+
+    expect(output).toContain('channel')
+    expect(output).toContain('apps')
+    expect(output).toContain('production')
+    expect(output).toContain('Example App (com.example.app)')
+    expect(output).toContain(longApp)
+    expect(output).not.toContain('…')
+    expect(output).toContain('staging')
   })
 
   test('prints an empty state when no channels exist', () => {
@@ -232,6 +232,6 @@ describe('printChannelsTable', () => {
 
     printChannelsTable([])
 
-    expect(lines).toEqual(['No channels found.'])
+    expect(stripAnsiLines(lines)).toEqual(['i No channels found.'])
   })
 })

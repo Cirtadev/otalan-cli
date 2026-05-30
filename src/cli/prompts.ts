@@ -1,24 +1,16 @@
 import readline from 'node:readline/promises'
-import {
-  clearLine,
-  cursorTo,
-  emitKeypressEvents,
-  moveCursor,
-} from 'node:readline'
 import { stdin as input, stdout as output } from 'node:process'
 
-// -----------------------------------------------------------------------------
-// ANSI styles
-// -----------------------------------------------------------------------------
+import {
+  cancel as cancelPrompt,
+  isCancel,
+  type Option,
+  password,
+  select,
+  text,
+} from '@clack/prompts'
 
-const ANSI_RESET = '\u001B[0m'
-const ANSI_BOLD = '\u001B[1m'
-const ANSI_CYAN = '\u001B[36m'
-const SECRET_INPUT_MASK = '*'
-
-// -----------------------------------------------------------------------------
-// Shared types
-// -----------------------------------------------------------------------------
+import { formatMuted } from './ui'
 
 type PromptHintInput = {
   question: string
@@ -27,6 +19,8 @@ type PromptHintInput = {
 }
 
 export type PromptSelectOption<T extends string> = {
+  disabled?: boolean
+  hint?: string
   label: string
   value: T
 }
@@ -41,91 +35,71 @@ export type PromptSelectWithHintInput<T extends string> = PromptHintInput & {
   fallback?: T
 }
 
-// -----------------------------------------------------------------------------
-// Text prompt helpers
-// -----------------------------------------------------------------------------
-
-type Keypress = {
-  ctrl?: boolean
-  name?: string
-}
-
 type PromptOutput = {
   write: (chunk: string) => unknown
 }
 
-function writeSecretInputMask(stream: PromptOutput, text: string) {
-  if (!text) {
+const SECRET_INPUT_MASK = '*'
+
+function isInteractiveTerminal() {
+  return Boolean(input.isTTY && output.isTTY)
+}
+
+function writeSecretInputMask(stream: PromptOutput, value: string) {
+  if (!value) {
     return
   }
 
-  stream.write(SECRET_INPUT_MASK.repeat(text.length))
+  stream.write(SECRET_INPUT_MASK.repeat(value.length))
 }
 
 function eraseSecretInputMask(stream: PromptOutput) {
   stream.write('\b \b')
 }
 
-async function promptSecret(question: string, fallback?: string) {
-  if (!input.isTTY || !output.isTTY) {
-    return promptText(question, fallback)
+function formatHint(inputValue: PromptHintInput) {
+  return [
+    inputValue.hint,
+    inputValue.example ? `Example: ${inputValue.example}` : undefined,
+  ].filter(Boolean).join('\n')
+}
+
+function formatCompactHint(inputValue: PromptHintInput) {
+  return formatHint(inputValue)
+    .split('\n')
+    .filter(Boolean)
+    .map(line => `  ${line}`)
+    .join('\n')
+}
+
+function printHint(inputValue: PromptHintInput) {
+  const hint = formatHint(inputValue)
+
+  if (!hint) {
+    return
   }
 
-  return new Promise<string>((resolve, reject) => {
-    let answer = ''
-    const message = fallback ? `${question} (${fallback}): ` : `${question}: `
-    const previousRawMode = input.isRaw
+  if (isInteractiveTerminal()) {
+    console.log('')
+    console.log(formatMuted(formatCompactHint(inputValue)))
+    return
+  }
 
-    const cleanup = () => {
-      input.off('keypress', onKeypress)
-      input.setRawMode(previousRawMode)
-      input.pause()
-    }
+  console.log('')
+  console.log(inputValue.hint)
 
-    const finish = () => {
-      cleanup()
-      output.write('\n')
-      resolve(answer.trim() || fallback || '')
-    }
+  if (inputValue.example) {
+    console.log(`Example: ${inputValue.example}`)
+  }
+}
 
-    const cancel = () => {
-      cleanup()
-      output.write('\n')
-      reject(new Error('Prompt cancelled.'))
-    }
+function assertPromptValue<T>(value: T | symbol): T {
+  if (isCancel(value)) {
+    cancelPrompt('Prompt cancelled.')
+    throw new Error('Prompt cancelled.')
+  }
 
-    const onKeypress = (text: string, key: Keypress) => {
-      if (key.ctrl && key.name === 'c') {
-        cancel()
-        return
-      }
-
-      if (key.name === 'return' || key.name === 'enter') {
-        finish()
-        return
-      }
-
-      if (key.name === 'backspace' || key.name === 'delete') {
-        if (answer.length > 0) {
-          answer = answer.slice(0, -1)
-          eraseSecretInputMask(output)
-        }
-
-        return
-      }
-
-      if (!key.ctrl && text) {
-        answer += text
-        writeSecretInputMask(output, text)
-      }
-    }
-
-    output.write(message)
-    emitKeypressEvents(input)
-    input.setRawMode(true)
-    input.resume()
-    input.on('keypress', onKeypress)
-  })
+  return value
 }
 
 async function promptText(question: string, fallback?: string) {
@@ -140,31 +114,35 @@ async function promptText(question: string, fallback?: string) {
   }
 }
 
-async function prompt(question: string, fallback?: string, options: { secret?: boolean } = {}) {
-  return options.secret
-    ? promptSecret(question, fallback)
-    : promptText(question, fallback)
-}
+async function promptInteractive(inputValue: PromptWithHintInput) {
+  if (inputValue.secret) {
+    const answer = assertPromptValue(await password({
+      mask: SECRET_INPUT_MASK,
+      message: inputValue.question,
+    }))
 
-function printHint(inputValue: PromptHintInput) {
-  console.log('')
-  console.log(inputValue.hint)
-
-  if (inputValue.example) {
-    console.log(`Example: ${inputValue.example}`)
+    return answer.trim() || inputValue.fallback || ''
   }
+
+  const answer = assertPromptValue(await text({
+    defaultValue: inputValue.fallback,
+    initialValue: inputValue.fallback,
+    message: inputValue.question,
+    placeholder: inputValue.fallback ? undefined : inputValue.example,
+  }))
+
+  return answer.trim() || inputValue.fallback || ''
 }
 
-export async function promptWithHint(input: PromptWithHintInput) {
-  printHint(input)
-  return prompt(input.question, input.fallback, {
-    secret: input.secret,
-  })
-}
+export async function promptWithHint(inputValue: PromptWithHintInput) {
+  printHint(inputValue)
 
-// -----------------------------------------------------------------------------
-// Select prompt helpers
-// -----------------------------------------------------------------------------
+  if (isInteractiveTerminal()) {
+    return promptInteractive(inputValue)
+  }
+
+  return promptText(inputValue.question, inputValue.fallback)
+}
 
 function resolveSelectPromptAnswer<T extends string>(
   answer: string,
@@ -172,48 +150,26 @@ function resolveSelectPromptAnswer<T extends string>(
   fallback?: T,
 ) {
   const normalizedAnswer = answer.trim().toLowerCase()
+  const selectableOptions = options.filter(option => !option.disabled)
 
-  if (!normalizedAnswer && fallback) {
+  if (
+    !normalizedAnswer
+    && fallback
+    && selectableOptions.some(option => option.value === fallback)
+  ) {
     return fallback
   }
 
   const numericIndex = Number(normalizedAnswer)
 
   if (!Number.isNaN(numericIndex)) {
-    return options[numericIndex - 1]?.value
+    return selectableOptions[numericIndex - 1]?.value
   }
 
-  return options.find(option => (
+  return selectableOptions.find(option => (
     option.value.toLowerCase() === normalizedAnswer
     || option.label.toLowerCase() === normalizedAnswer
   ))?.value
-}
-
-function clearRenderedBlock(lineCount: number) {
-  if (lineCount < 1) {
-    return
-  }
-
-  moveCursor(output, 0, -lineCount)
-
-  for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
-    clearLine(output, 0)
-    cursorTo(output, 0)
-
-    if (lineIndex < lineCount - 1) {
-      moveCursor(output, 0, 1)
-    }
-  }
-
-  moveCursor(output, 0, -(lineCount - 1))
-}
-
-function styleSelectedOption(label: string) {
-  return `${ANSI_CYAN}${ANSI_BOLD}› ● ${label}${ANSI_RESET}`
-}
-
-function styleUnselectedOption(label: string) {
-  return `  ○ ${label}`
 }
 
 async function promptSelect<T extends string>(
@@ -221,16 +177,18 @@ async function promptSelect<T extends string>(
   options: readonly PromptSelectOption<T>[],
   fallback?: T,
 ) {
-  const fallbackIndex = fallback
-    ? Math.max(options.findIndex(option => option.value === fallback), 0)
-    : 0
-
-  if (!input.isTTY || !output.isTTY) {
-    const choices = options
+  if (!isInteractiveTerminal()) {
+    const selectableOptions = options.filter(option => !option.disabled)
+    const choices = selectableOptions
       .map((option, index) => `${index + 1}. ${option.label}`)
       .join(', ')
-    const answer = await prompt(`${question} (${choices})`, fallback)
-    const selectedValue = resolveSelectPromptAnswer(answer, options, fallback)
+
+    if (!choices) {
+      throw new Error(`No selectable choices for ${question}.`)
+    }
+
+    const answer = await promptText(`${question} (${choices})`, fallback)
+    const selectedValue = resolveSelectPromptAnswer(answer, selectableOptions, fallback)
 
     if (!selectedValue) {
       throw new Error(`Invalid choice for ${question}.`)
@@ -239,78 +197,16 @@ async function promptSelect<T extends string>(
     return selectedValue
   }
 
-  return new Promise<T>((resolve, reject) => {
-    let renderedLineCount = 0
-    let selectedIndex = fallbackIndex
-    const previousRawMode = input.isRaw
-
-    const render = () => {
-      if (renderedLineCount > 0) {
-        clearRenderedBlock(renderedLineCount)
-      }
-
-      const lines = [
-        `${ANSI_BOLD}${question}:${ANSI_RESET}`,
-        'Use arrow keys and press Enter.',
-        ...options.map((option, index) => (
-          selectedIndex === index
-            ? styleSelectedOption(option.label)
-            : styleUnselectedOption(option.label)
-        )),
-      ]
-
-      output.write(`${lines.join('\n')}\n`)
-      renderedLineCount = lines.length
-    }
-
-    const cleanup = () => {
-      input.off('keypress', onKeypress)
-      input.setRawMode(previousRawMode)
-      input.pause()
-    }
-
-    const finish = (value: T) => {
-      clearRenderedBlock(renderedLineCount)
-      cleanup()
-      output.write(`${question}: ${options[selectedIndex]?.label ?? value}\n`)
-      resolve(value)
-    }
-
-    const cancel = () => {
-      clearRenderedBlock(renderedLineCount)
-      cleanup()
-      reject(new Error('Prompt cancelled.'))
-    }
-
-    const onKeypress = (_text: string, key: Keypress) => {
-      if (key.ctrl && key.name === 'c') {
-        cancel()
-        return
-      }
-
-      if (key.name === 'up') {
-        selectedIndex = (selectedIndex - 1 + options.length) % options.length
-        render()
-        return
-      }
-
-      if (key.name === 'down') {
-        selectedIndex = (selectedIndex + 1) % options.length
-        render()
-        return
-      }
-
-      if (key.name === 'return' || key.name === 'enter') {
-        finish(options[selectedIndex].value)
-      }
-    }
-
-    emitKeypressEvents(input)
-    input.setRawMode(true)
-    input.resume()
-    input.on('keypress', onKeypress)
-    render()
-  })
+  return assertPromptValue(await select({
+    initialValue: fallback,
+    message: question,
+    options: options.map(option => ({
+      disabled: option.disabled,
+      hint: option.hint,
+      label: option.label,
+      value: option.value,
+    })) as Option<T>[],
+  }))
 }
 
 export async function promptSelectWithHint<T extends string>(inputValue: PromptSelectWithHintInput<T>) {
@@ -320,5 +216,7 @@ export async function promptSelectWithHint<T extends string>(inputValue: PromptS
 
 export const promptTestUtils = {
   eraseSecretInputMask,
+  formatCompactHint,
+  resolveSelectPromptAnswer,
   writeSecretInputMask,
 }

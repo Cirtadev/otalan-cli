@@ -6,10 +6,7 @@ import { stdout } from 'node:process'
 
 import type { BundleIngestItem } from '../../src/http'
 import { handlePublish } from '../../src/commands/release'
-
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
+import { stripAnsiLines } from '../helpers/ansi'
 
 const originalFetch = globalThis.fetch
 const originalConsoleLog = console.log
@@ -23,10 +20,6 @@ afterEach(() => {
     value: originalStdoutIsTTY,
   })
 })
-
-// -----------------------------------------------------------------------------
-// Fixtures
-// -----------------------------------------------------------------------------
 
 function createIngest(overrides: Partial<BundleIngestItem> = {}): BundleIngestItem {
   return {
@@ -233,10 +226,6 @@ function forceStaticProgressOutput() {
   })
 }
 
-// -----------------------------------------------------------------------------
-// Publish command
-// -----------------------------------------------------------------------------
-
 describe('handlePublish', () => {
   test('creates a direct upload intent, uploads the ZIP, and completes the ingest', async () => {
     const cwd = await createPublishFixture()
@@ -262,15 +251,25 @@ describe('handlePublish', () => {
       'POST https://api.otalan.com/v1/releases/ingests/ingest-123/complete',
       'GET https://api.otalan.com/v1/releases/ingests/ingest-123',
     ])
-    expect(output).toEqual([
+    const cleanOutput = stripAnsiLines(output)
+    const joinedOutput = cleanOutput.join('\n')
+
+    expect(cleanOutput.slice(0, 8)).toEqual([
       '',
+      'i Publishing expo OTA bundle 1.0.0-web.2 to Customer Portal (com.example.app) on ios/production (runtime 1.0.0, rollout 100%, mandatory).',
       '✓ Preparing',
       '✓ Uploading',
       '✓ Validating',
       '✓ Activating',
       '',
-      'Release is Live 🚀',
+      '✓ Release is Live',
     ])
+    expect(joinedOutput).toContain('│ App             │ Customer Portal (com.example.app) │')
+    expect(joinedOutput).toContain('│ Target          │ expo')
+    expect(joinedOutput).toContain('│ Bundle ID       │ 1.0.0-web.2')
+    expect(joinedOutput).toContain('│ Archive         │ bundle-1.0.0-web.2.zip (9 bytes)')
+    expect(joinedOutput).toContain('│ Status          │ ready')
+    expect(joinedOutput).toContain('│ Checksum        │ 000000000000...00000000')
   })
 
   test('prints the detailed publish output when verbose is set', async () => {
@@ -291,17 +290,24 @@ describe('handlePublish', () => {
       verbose: true,
     })
 
-    const joinedOutput = output.join('\n')
+    const cleanOutput = stripAnsiLines(output)
+    const joinedOutput = cleanOutput.join('\n')
+    const contextBottomIndex = cleanOutput.findIndex(line => line.startsWith('└──────────────'))
 
     expect(output).not.toContain('✓ Preparing')
-    expect(joinedOutput).toContain('Organization: Test Organization (test-org)')
-    expect(joinedOutput).toContain('Project: Mobile App (mobile-app)')
-    expect(joinedOutput).toContain('App: Customer Portal (com.example.app)')
-    expect(joinedOutput).toContain('Bundle ID: 1.0.0-web.2')
-    expect(joinedOutput).toContain('Ingest ID: ingest-123')
-    expect(joinedOutput).toContain('Waiting for validation...')
-    expect(joinedOutput).toContain('Release is Live 🚀')
-    expect(joinedOutput).toContain('Status: ready')
+    expect(cleanOutput[contextBottomIndex + 1]).toBe('')
+    expect(cleanOutput[contextBottomIndex + 2]?.startsWith('┌')).toBe(true)
+    expect(joinedOutput).toContain('│ Organization │ Test Organization (test-org)')
+    expect(joinedOutput).toContain('│ Project      │ Mobile App (mobile-app)')
+    expect(joinedOutput).toContain('│ App          │ Customer Portal (com.example.app) │')
+    expect(joinedOutput).toContain('│ Target          │ expo')
+    expect(joinedOutput).toContain('│ Bundle ID       │ 1.0.0-web.2')
+    expect(joinedOutput).toContain('│ Archive         │ bundle-1.0.0-web.2.zip (9 bytes)')
+    expect(joinedOutput).toContain('│ Ingest ID │ ingest-123')
+    expect(joinedOutput).toContain('i Waiting for validation...')
+    expect(joinedOutput).toContain('✓ Release is Live')
+    expect(joinedOutput).toContain('│ Status          │ ready')
+    expect(joinedOutput).toContain('│ Checksum        │ 000000000000...00000000')
   })
 
   test('cancels the upload intent when direct object storage upload fails', async () => {

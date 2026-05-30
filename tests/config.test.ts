@@ -5,10 +5,6 @@ import path from 'node:path'
 
 import { saveGlobalConfig } from '../src/config'
 
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
-
 const tempDirs: string[] = []
 
 afterEach(async () => {
@@ -18,10 +14,6 @@ afterEach(async () => {
   })))
   tempDirs.length = 0
 })
-
-// -----------------------------------------------------------------------------
-// Global auth config
-// -----------------------------------------------------------------------------
 
 describe('saveGlobalConfig', () => {
   test('stores the OTA Publish Key config with owner-only permissions', async () => {

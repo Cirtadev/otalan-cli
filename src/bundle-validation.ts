@@ -1,6 +1,3 @@
-// -----------------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------------
 
 type NativeBundleEntryRule = {
   reason: NativeBundleEntryReason
@@ -17,10 +14,6 @@ export type NativeBundleEntry = {
   path: string
   reason: NativeBundleEntryReason
 }
-
-// -----------------------------------------------------------------------------
-// Constants
-// -----------------------------------------------------------------------------
 
 const ROOT_NATIVE_DIRECTORIES = new Set([
   'android',
@@ -83,10 +76,6 @@ const NATIVE_BUNDLE_ENTRY_RULES: NativeBundleEntryRule[] = [
     test: (_relativePath, _segments, fileName) => NATIVE_FILE_EXTENSIONS.some(extension => fileName.endsWith(extension)),
   },
 ]
-
-// -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
 
 export function findNativeBundleEntries(relativePaths: string[]): NativeBundleEntry[] {
   return relativePaths

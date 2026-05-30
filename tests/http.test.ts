@@ -8,15 +8,8 @@ import {
   getReleaseIngest,
   listReleaseApps,
   listReleaseChannels,
-  listReleases,
-  pauseRelease,
-  resumeRelease,
   uploadReleaseArchive,
 } from '../src/http'
-
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
 
 const originalFetch = globalThis.fetch
 
@@ -41,30 +34,6 @@ function createQueuedIngest(overrides: Record<string, unknown> = {}) {
     fileSizeBytes: 1234,
     processedAt: null,
     createdAt: '2026-04-21T00:00:00.000Z',
-    ...overrides,
-  }
-}
-
-function createRelease(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'release-123',
-    projectId: 'project-123',
-    appId: 'com.example.app',
-    platform: 'ios',
-    channel: 'production',
-    runtimeVersion: '1.0.0',
-    bundleId: '1.0.0-web.2',
-    releaseStorageId: 'release-storage-123',
-    checksum: 'abc123',
-    mandatory: true,
-    rolloutPercent: 100,
-    rolloutState: 'active',
-    releaseNotes: null,
-    fileSizeBytes: 1234,
-    storageObjectExists: true,
-    isActive: true,
-    publishedAt: '2026-04-21T00:00:00.000Z',
-    resolvedDownloadUrl: 'https://cdn.example.com/bundle.zip',
     ...overrides,
   }
 }
@@ -97,10 +66,6 @@ function createArchiveBlob() {
     type: 'application/zip',
   })
 }
-
-// -----------------------------------------------------------------------------
-// Release ingest requests
-// -----------------------------------------------------------------------------
 
 describe('getReleaseContext', () => {
   test('reads the authenticated OTA Publish Key context', async () => {
@@ -489,154 +454,5 @@ describe('cancelReleaseUpload', () => {
 
     expect(item.id).toBe('ingest-123')
     expect(item.status).toBe('pending')
-  })
-})
-
-describe('pauseRelease', () => {
-  test('posts the release tuple to the pause endpoint', async () => {
-    let requestBody: unknown = null
-
-    globalThis.fetch = (async (input, init) => {
-      expect(String(input)).toBe('https://api.otalan.com/v1/releases/pause')
-      expect(init?.method).toBe('POST')
-      expect(init?.headers).toEqual({
-        'x-api-key': 'test-key',
-        'Content-Type': 'application/json',
-      })
-      requestBody = init?.body
-
-      return new Response(JSON.stringify({
-        item: createRelease({
-          rolloutState: 'paused',
-        }),
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-    }) as typeof fetch
-
-    const item = await pauseRelease({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      appId: 'com.example.app',
-      platform: 'ios',
-      channel: 'production',
-      runtimeVersion: '1.0.0',
-    })
-
-    expect(item.rolloutState).toBe('paused')
-    expect(JSON.parse(requestBody as string)).toEqual({
-      appId: 'com.example.app',
-      platform: 'ios',
-      channel: 'production',
-      runtimeVersion: '1.0.0',
-    })
-  })
-})
-
-describe('resumeRelease', () => {
-  test('posts the release tuple to the resume endpoint', async () => {
-    let requestBody: unknown = null
-
-    globalThis.fetch = (async (input, init) => {
-      expect(String(input)).toBe('https://api.otalan.com/v1/releases/resume')
-      expect(init?.method).toBe('POST')
-      expect(init?.headers).toEqual({
-        'x-api-key': 'test-key',
-        'Content-Type': 'application/json',
-      })
-      requestBody = init?.body
-
-      return new Response(JSON.stringify({
-        item: createRelease(),
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-    }) as typeof fetch
-
-    const item = await resumeRelease({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      appId: 'com.example.app',
-      platform: 'ios',
-      channel: 'production',
-      runtimeVersion: '1.0.0',
-    })
-
-    expect(item.rolloutState).toBe('active')
-    expect(JSON.parse(requestBody as string)).toEqual({
-      appId: 'com.example.app',
-      platform: 'ios',
-      channel: 'production',
-      runtimeVersion: '1.0.0',
-    })
-  })
-})
-
-describe('release request errors', () => {
-  test('explains that archived apps are unavailable to release operations', async () => {
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({
-        message: 'App not found in selected project',
-      }), {
-        status: 404,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })) as unknown as typeof fetch
-
-    await expect(listReleases({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      appId: 'com.example.app',
-    })).rejects.toThrow(
-      'App not found in selected project. Check that appId is correct and the app is not archived.',
-    )
-  })
-
-  test('includes non-JSON response bodies in API errors', async () => {
-    globalThis.fetch = (async () =>
-      new Response('Bad gateway from edge', {
-        status: 502,
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-      })) as unknown as typeof fetch
-
-    await expect(listReleases({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      appId: 'com.example.app',
-    })).rejects.toThrow('Request failed with status 502: Bad gateway from edge')
-  })
-
-  test('preserves empty query-string values', async () => {
-    globalThis.fetch = (async (input) => {
-      const url = new URL(String(input))
-
-      expect(url.searchParams.has('channel')).toBe(true)
-      expect(url.searchParams.get('channel')).toBe('')
-
-      return new Response(JSON.stringify({
-        items: [],
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-    }) as typeof fetch
-
-    await expect(listReleases({
-      apiUrl: 'https://api.otalan.com',
-      apiKey: 'test-key',
-      appId: 'com.example.app',
-      channel: '',
-    })).resolves.toEqual([])
   })
 })

@@ -1,9 +1,5 @@
 import type { MobilePlatform } from './config'
 
-// -----------------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------------
-
 export type ReleaseItem = {
   id: string
   projectId: string
@@ -106,10 +102,6 @@ type ReleaseArchiveMetadata = {
 type StorageUploadHeaders = Record<string, string>
 
 const MAX_ERROR_BODY_LENGTH = 500
-
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
 
 function normalizeApiUrl(apiUrl: string) {
   return apiUrl.replace(/\/+$/, '')
@@ -268,10 +260,6 @@ function normalizeReleaseChannels(items: ReleaseChannelResponseItem[]): ReleaseC
     })
     .sort((left, right) => left.channel.localeCompare(right.channel))
 }
-
-// -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
 
 export async function createReleaseUploadIntent(
   input: ReleaseClientConfig & ReleaseIdentity & ReleasePublishMetadata & ReleaseArchiveMetadata,

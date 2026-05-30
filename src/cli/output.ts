@@ -1,17 +1,13 @@
-import { stdout } from 'node:process'
-
 import type { BundleIdSource } from '../bundle'
 import type { ProjectConfig } from '../config'
 import type { BundleIngestItem, ReleaseChannelAppItem, ReleaseChannelItem, ReleaseContext, ReleaseItem } from '../http'
-
-// -----------------------------------------------------------------------------
-// Generic output
-// -----------------------------------------------------------------------------
-
-const ANSI_GREEN = '\x1B[32m'
-const ANSI_RESET = '\x1B[0m'
-const ANSI_ESCAPE = String.fromCharCode(27)
-const ANSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*m`, 'g')
+import { formatKeyValueTable, printTable } from './table'
+import {
+  formatHeading,
+  formatMuted,
+  formatWarning,
+  styleText,
+} from './ui'
 
 export function printJson(value: unknown) {
   console.log(JSON.stringify(value, null, 2))
@@ -41,33 +37,22 @@ function formatContextEntity(name: string | undefined, identifier: string | unde
 }
 
 export function formatProjectConfigSummary(config: ProjectConfig) {
-  const lines = [
-    config.organizationSlug
-      ? `Organization: ${config.organizationSlug}`
-      : undefined,
-    config.projectSlug
-      ? `Project: ${config.projectSlug}`
-      : undefined,
-    `App: ${formatContextEntity(config.appName, config.appId)}`,
-  ].filter(Boolean)
-
-  return lines.join('\n')
+  return formatKeyValueTable([
+    ['Organization', config.organizationSlug],
+    ['Project', config.projectSlug],
+    ['App', formatContextEntity(config.appName, config.appId)],
+  ])
 }
 
 export function formatReleaseContextSummary(
   context: ReleaseContext,
   app?: { name?: string, appId: string },
 ) {
-  const lines = [
-    `Organization: ${formatContextEntity(context.organizationName, context.organizationSlug)}`,
-    `Project: ${formatContextEntity(context.projectName, context.projectSlug)}`,
-  ]
-
-  if (app) {
-    lines.push(`App: ${formatContextEntity(app.name, app.appId)}`)
-  }
-
-  return lines.join('\n')
+  return formatKeyValueTable([
+    ['Organization', formatContextEntity(context.organizationName, context.organizationSlug)],
+    ['Project', formatContextEntity(context.projectName, context.projectSlug)],
+    ['App', app ? formatContextEntity(app.name, app.appId) : undefined],
+  ])
 }
 
 export function printHelp(version: string, options: { includeNotes?: boolean } = {}) {
@@ -105,23 +90,26 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
   const commandWidth = 12
   const includeNotes = options.includeNotes ?? true
 
-  console.log(`Otalan CLI ${version}`)
+  console.log(formatHeading(`Otalan CLI ${version}`))
   console.log('')
-  console.log('Usage: otalan <command> [options]')
+  console.log(`${formatHeading('Usage:')} ${styleText('otalan <command> [options]', 'bold')}`)
   console.log('')
-  console.log('Commands:')
+  console.log(formatHeading('Commands:'))
 
   commands.forEach(([command, args, description], index) => {
     if (command && index > 0) {
       console.log('')
     }
 
-    const left = command
+    const rawLeft = command
       ? `  ${command.padEnd(commandWidth, ' ')} ${args}`.trimEnd()
       : `  ${''.padEnd(commandWidth, ' ')} ${args}`.trimEnd()
+    const left = command
+      ? `  ${styleText(command.padEnd(commandWidth, ' '), 'cyan')} ${formatMuted(args)}`.trimEnd()
+      : rawLeft
 
     if (description) {
-      console.log(`${left.padEnd(78, ' ')} ${description}`)
+      console.log(`${left}${''.padEnd(Math.max(1, 78 - rawLeft.length), ' ')} ${description}`)
     } else {
       console.log(left)
     }
@@ -129,20 +117,16 @@ export function printHelp(version: string, options: { includeNotes?: boolean } =
 
   if (includeNotes) {
     console.log('')
-    console.log('Notes:')
+    console.log(formatHeading('Notes:'))
 
     for (const note of notes) {
-      console.log(`  ${note}`)
+      console.log(`  ${formatMuted(note)}`)
     }
   }
 
   console.log('')
-  console.log('Run `otalan <command> --help` to show this help text.')
+  console.log(formatMuted('Run `otalan <command> --help` to show this help text.'))
 }
-
-// -----------------------------------------------------------------------------
-// Release summaries
-// -----------------------------------------------------------------------------
 
 export function formatBundleSummary(input: {
   bundleId: string
@@ -155,37 +139,23 @@ export function formatBundleSummary(input: {
   publishedAt?: string
   selectable?: boolean
 }) {
-  const lines = [
-    `Bundle ID: ${input.bundleId}`,
-    `Platform: ${input.platform}`,
-    `Channel: ${input.channel}`,
-    `Runtime version: ${input.runtimeVersion}`,
-  ]
-
-  if (input.rolloutPercent !== undefined) {
-    lines.push(`Rollout: ${input.rolloutPercent}%`)
-  }
-
-  if (input.rolloutState) {
-    lines.push(`State: ${input.rolloutState}`)
-  }
-
-  if (input.publishedAt) {
-    lines.push(`Published at: ${input.publishedAt}`)
-  }
-
-  if (input.selectable !== undefined) {
-    lines.push(`Selectable: ${input.selectable ? 'yes' : 'no'}`)
-  }
-
-  if (input.releaseNotes) {
-    lines.push(`Release notes: ${input.releaseNotes}`)
-  }
-
-  return lines.join('\n')
+  return formatKeyValueTable([
+    ['Bundle ID', input.bundleId],
+    ['Platform', input.platform],
+    ['Channel', input.channel],
+    ['Runtime version', input.runtimeVersion],
+    ['Rollout', input.rolloutPercent === undefined ? undefined : `${input.rolloutPercent}%`],
+    ['State', input.rolloutState],
+    ['Published at', input.publishedAt],
+    ['Selectable', input.selectable === undefined ? undefined : input.selectable ? 'yes' : 'no'],
+    ['Release notes', input.releaseNotes],
+  ])
 }
 
 export function formatPublishSummary(input: {
+  app?: string
+  archiveFileName?: string
+  archiveSizeBytes?: number
   bundleId: string
   platform: string
   channel: string
@@ -193,115 +163,117 @@ export function formatPublishSummary(input: {
   rolloutPercent: number
   mandatory: boolean
   releaseNotes?: string
+  target?: string
 }) {
-  const lines = [
-    `Bundle ID: ${input.bundleId}`,
-    `Platform: ${input.platform}`,
-    `Channel: ${input.channel}`,
-    `Runtime version: ${input.runtimeVersion}`,
-    `Rollout: ${input.rolloutPercent}%`,
-    `Mandatory: ${input.mandatory ? 'yes' : 'no'}`,
-  ]
+  return formatKeyValueTable([
+    ['App', input.app],
+    ['Target', input.target],
+    ['Bundle ID', input.bundleId],
+    ['Platform', input.platform],
+    ['Channel', input.channel],
+    ['Runtime version', input.runtimeVersion],
+    ['Rollout', `${input.rolloutPercent}%`],
+    ['Mandatory', input.mandatory ? 'yes' : 'no'],
+    ['Archive', formatArchiveValue(input.archiveFileName, input.archiveSizeBytes)],
+    ['Release notes', input.releaseNotes],
+  ])
+}
 
-  if (input.releaseNotes) {
-    lines.push(`Release notes: ${input.releaseNotes}`)
+export function formatPublishedReleaseSummary(input: {
+  app: string
+  archiveFileName: string
+  archiveSizeBytes: number
+  ingest: BundleIngestItem
+  releaseNotes?: string
+  target: string
+}) {
+  return formatKeyValueTable([
+    ['App', input.app],
+    ['Target', input.target],
+    ['Bundle ID', input.ingest.bundleId],
+    ['Platform', input.ingest.platform],
+    ['Channel', input.ingest.channel],
+    ['Runtime version', input.ingest.runtimeVersion],
+    ['Rollout', `${input.ingest.rolloutPercent}%`],
+    ['Mandatory', input.ingest.mandatory ? 'yes' : 'no'],
+    ['Archive', formatArchiveValue(input.archiveFileName, input.archiveSizeBytes)],
+    ['Ingest ID', input.ingest.id],
+    ['Status', input.ingest.status],
+    ['Processed at', input.ingest.processedAt],
+    ['Checksum', formatChecksum(input.ingest.checksum)],
+    ['Release notes', input.releaseNotes ?? input.ingest.releaseNotes],
+  ])
+}
+
+function formatArchiveValue(fileName?: string, fileSizeBytes?: number) {
+  if (!fileName) {
+    return undefined
   }
 
-  return lines.join('\n')
+  if (fileSizeBytes === undefined) {
+    return fileName
+  }
+
+  return `${fileName} (${fileSizeBytes} bytes)`
+}
+
+function formatChecksum(checksum: string | null) {
+  if (!checksum || checksum.length <= 24) {
+    return checksum
+  }
+
+  return `${checksum.slice(0, 12)}...${checksum.slice(-8)}`
 }
 
 export function formatIngestSummary(input: {
   ingest: BundleIngestItem
 }) {
-  const lines = [
-    `Ingest ID: ${input.ingest.id}`,
-    `Status: ${input.ingest.status}`,
-    `Size: ${input.ingest.fileSizeBytes} bytes`,
-    `Queued at: ${input.ingest.createdAt}`,
-  ]
-
-  if (input.ingest.processedAt) {
-    lines.push(`Processed at: ${input.ingest.processedAt}`)
-  }
-
-  if (input.ingest.checksum) {
-    lines.push(`Checksum: ${input.ingest.checksum}`)
-  }
-
-  if (input.ingest.failureReason) {
-    lines.push(`Failure reason: ${input.ingest.failureReason}`)
-  }
-
-  return lines.join('\n')
+  return formatKeyValueTable([
+    ['Ingest ID', input.ingest.id],
+    ['Status', input.ingest.status],
+    ['Size', `${input.ingest.fileSizeBytes} bytes`],
+    ['Queued at', input.ingest.createdAt],
+    ['Processed at', input.ingest.processedAt],
+    ['Checksum', input.ingest.checksum],
+    ['Failure reason', input.ingest.failureReason],
+  ])
 }
-
-function stripAnsi(value: string) {
-  return value.replace(ANSI_PATTERN, '')
-}
-
-function visibleLength(value: string) {
-  return stripAnsi(value).length
-}
-
-function formatGreen(value: string) {
-  if (!stdout.isTTY) {
-    return value
-  }
-
-  return `${ANSI_GREEN}${value}${ANSI_RESET}`
-}
-
-function formatCell(value: string, width: number) {
-  const length = visibleLength(value)
-
-  if (length <= width) {
-    return `${value}${''.padEnd(width - length, ' ')}`
-  }
-
-  if (width <= 1) {
-    return '…'
-  }
-
-  return `${stripAnsi(value).slice(0, width - 1)}…`
-}
-
-// -----------------------------------------------------------------------------
-// Tables
-// -----------------------------------------------------------------------------
 
 export function printBundlesTable(items: ReleaseItem[]) {
-  const rows = items.map(item => [
-    item.isActive ? 'yes' : 'no',
-    item.resolvedDownloadUrl ? 'yes' : 'no',
-    item.resolvedDownloadUrl ? 'available' : 'deleted',
-    item.bundleId,
-    item.runtimeVersion,
-    item.platform,
-    item.channel,
-    `${item.rolloutPercent}%`,
-    item.rolloutState,
-    item.publishedAt.slice(0, 19).replace('T', ' '),
-  ])
-  const headers = ['active', 'selectable', 'archive', 'bundleId', 'runtimeVersion', 'platform', 'channel', 'rollout', 'state', 'publishedAt']
-  const widths = headers.map((header, index) =>
-    Math.min(
-      32,
-      Math.max(header.length, ...rows.map(row => row[index]?.length ?? 0)),
-    ),
-  )
-
-  console.log(headers.map((header, index) => formatCell(header, widths[index])).join('  '))
-  console.log(widths.map(width => ''.padEnd(width, '-')).join('  '))
-
-  for (const row of rows) {
-    const formattedRow = row.map((cell, index) => formatCell(cell, widths[index])).join('  ')
-
-    console.log(row[0] === 'yes' ? formatGreen(formattedRow) : formattedRow)
-  }
+  printTable({
+    columns: [
+      { header: 'active', maxWidth: 6 },
+      { header: 'select', maxWidth: 6 },
+      { header: 'archive', maxWidth: 9 },
+      { header: 'bundleId', maxWidth: 32 },
+      { header: 'runtime', maxWidth: 18 },
+      { header: 'platform', maxWidth: 8 },
+      { header: 'channel', maxWidth: 18 },
+      { align: 'right', header: 'rollout', maxWidth: 7 },
+      { header: 'state', maxWidth: 12 },
+      { header: 'publishedAt', maxWidth: 19 },
+    ],
+    emptyMessage: 'No bundles found.',
+    rows: items.map(item => ({
+      cells: [
+        item.isActive ? 'yes' : 'no',
+        item.resolvedDownloadUrl ? 'yes' : 'no',
+        item.resolvedDownloadUrl ? 'available' : 'deleted',
+        item.bundleId,
+        item.runtimeVersion,
+        item.platform,
+        item.channel,
+        `${item.rolloutPercent}%`,
+        item.rolloutState,
+        item.publishedAt.slice(0, 19).replace('T', ' '),
+      ],
+      tone: item.isActive ? 'success' as const : item.resolvedDownloadUrl ? undefined : 'muted' as const,
+    })),
+  })
 
   if (items.some(item => !item.resolvedDownloadUrl)) {
     console.log('')
-    console.log('Rows with archive "deleted" are shown for history, but they are not selectable for rollback.')
+    console.log(formatWarning('Rows with archive "deleted" are shown for history, but they are not selectable for rollback.'))
   }
 }
 
@@ -310,24 +282,17 @@ function formatChannelApp(app: ReleaseChannelAppItem) {
 }
 
 export function printChannelsTable(channels: ReleaseChannelItem[]) {
-  if (channels.length === 0) {
-    console.log('No channels found.')
-    return
-  }
-
-  const rows = channels.map(item => [
-    item.channel,
-    item.apps.map(formatChannelApp).join(', '),
-  ])
-  const headers = ['channel', 'apps']
-  const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map(row => row[index]?.length ?? 0)),
-  )
-
-  console.log(headers.map((header, index) => formatCell(header, widths[index])).join('  '))
-  console.log(widths.map(width => ''.padEnd(width, '-')).join('  '))
-
-  for (const row of rows) {
-    console.log(row.map((cell, index) => formatCell(cell, widths[index])).join('  '))
-  }
+  printTable({
+    columns: [
+      { header: 'channel', maxWidth: 24 },
+      { header: 'apps', maxWidth: 120 },
+    ],
+    emptyMessage: 'No channels found.',
+    rows: channels.map(item => ({
+      cells: [
+        item.channel,
+        item.apps.map(formatChannelApp).join(', '),
+      ],
+    })),
+  })
 }

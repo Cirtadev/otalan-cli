@@ -2,6 +2,25 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.6.0 - 2026-05-30
+
+### Added
+
+- Add `@clack/prompts` for maintained cross-platform interactive prompts, loading indicators, and terminal status rendering.
+
+### Changed
+
+- Centralize CLI success, warning, info, and error formatting with compact symbols and colorized output.
+- Render CLI context, key generation, status, channels, and bundle lists as compact terminal tables.
+- Hide Expo subprocess output during `otalan bundle` by default while keeping it available with `--verbose` or `-v`.
+- Show the app, release tuple, archive, rollout, and validation result in default `otalan publish` output.
+- Keep release context table spacing to one blank line before the next section.
+- Let interactive `otalan rollback` select the target bundle from a compact bundle list, with the current live bundle highlighted and non-target archives disabled.
+- Replace the custom interactive prompt renderer with Clack prompts while keeping stable non-interactive progress output.
+- Trim redundant interactive prompt hints from `otalan login` and `otalan bundle`.
+- Split large bundle, bundle command, and release command modules into smaller focused files under the 500-line target.
+- Update README output examples and third-party license documentation for the new terminal UI dependency.
+
 ## 1.5.3 - 2026-05-28
 
 ### Changed

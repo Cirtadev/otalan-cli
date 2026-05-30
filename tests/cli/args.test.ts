@@ -2,10 +2,6 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseArgs, readBooleanOption, readStringOption } from '../../src/cli/args'
 
-// -----------------------------------------------------------------------------
-// parseArgs
-// -----------------------------------------------------------------------------
-
 describe('parseArgs', () => {
   test('parses long options with values for bundles subcommands', () => {
     const parsed = parseArgs([
@@ -54,10 +50,6 @@ describe('parseArgs', () => {
     })
   })
 })
-
-// -----------------------------------------------------------------------------
-// option readers
-// -----------------------------------------------------------------------------
 
 describe('option readers', () => {
   test('reads string options only when the value is a string', () => {

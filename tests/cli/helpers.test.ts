@@ -14,10 +14,6 @@ import {
   resolveTarget,
 } from '../../src/cli/helpers'
 
-// -----------------------------------------------------------------------------
-// Fixtures
-// -----------------------------------------------------------------------------
-
 const capacitorManifest: BundleManifest = {
   target: 'capacitor',
   hash: 'abc123',
@@ -40,10 +36,6 @@ const expoManifest: BundleManifest = {
   createdAt: '2026-04-10T00:00:00.000Z',
   platform: 'ios',
 }
-
-// -----------------------------------------------------------------------------
-// helper resolution
-// -----------------------------------------------------------------------------
 
 describe('resolveTarget', () => {
   test('uses the explicit option when provided', () => {

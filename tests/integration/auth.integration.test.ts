@@ -6,10 +6,6 @@ import path from 'node:path'
 import { authCommandTestUtils } from '../../src/commands/auth'
 import { saveGlobalConfig } from '../../src/config'
 
-// -----------------------------------------------------------------------------
-// Test setup
-// -----------------------------------------------------------------------------
-
 const PROJECT_ROOT = path.resolve(import.meta.dir, '..', '..')
 const tempDirs: string[] = []
 
@@ -20,10 +16,6 @@ afterEach(async () => {
   })))
   tempDirs.length = 0
 })
-
-// -----------------------------------------------------------------------------
-// Fixtures
-// -----------------------------------------------------------------------------
 
 async function runCli(args: string[], env: NodeJS.ProcessEnv) {
   const proc = Bun.spawn(['bun', './src/bin.ts', ...args], {
@@ -48,10 +40,6 @@ async function runCli(args: string[], env: NodeJS.ProcessEnv) {
 
   return Promise.race([result, timeout])
 }
-
-// -----------------------------------------------------------------------------
-// Auth integration
-// -----------------------------------------------------------------------------
 
 describe('login integration', () => {
   test('persists auth after successful validation', async () => {

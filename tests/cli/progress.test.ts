@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { createProgressReporter } from '../../src/cli/progress'
+import { stripAnsiLines } from '../helpers/ansi'
 
 describe('createProgressReporter', () => {
   test('prints stable progress lines when animation is disabled', () => {
@@ -13,7 +14,7 @@ describe('createProgressReporter', () => {
     progress.start('Uploading').succeed()
     progress.start('Validating').fail()
 
-    expect(output).toEqual([
+    expect(stripAnsiLines(output)).toEqual([
       '✓ Uploading',
       '✕ Validating',
     ])

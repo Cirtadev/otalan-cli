@@ -1,422 +1,36 @@
 import path from 'node:path'
-import { stdin, stdout } from 'node:process'
 
-import { bundleProject, formatOmittedSourceMapCount, resolveProjectRuntimeVersion } from '../bundle'
+import { bundleProject, formatOmittedSourceMapCount } from '../bundle'
 import { readBooleanOption, readStringOption } from '../cli/args'
 import {
-  assertReleaseContextMatchesConfig,
   readBundleManifestIfExists,
-  resolveApiConfig,
   resolvePlatform,
-  resolveProject,
   resolveTarget,
   type CommandContext,
 } from '../cli/helpers'
-import type { MobilePlatform, Target } from '../config'
-import { formatBundleIdSource, formatProjectConfigSummary, printJson } from '../cli/output'
+import { formatBundleIdSource, printJson } from '../cli/output'
 import { createProgressReporter } from '../cli/progress'
-import { promptSelectWithHint, promptWithHint, type PromptWithHintInput } from '../cli/prompts'
-import type { BundleManifest } from '../bundle'
-import { listReleases, type ReleaseItem } from '../http'
-
-// -----------------------------------------------------------------------------
-// Prompt options
-// -----------------------------------------------------------------------------
-
-const TARGET_OPTIONS = [
-  { label: 'capacitor', value: 'capacitor' },
-  { label: 'expo', value: 'expo' },
-] as const satisfies ReadonlyArray<{ label: string, value: Target }>
-
-const PLATFORM_OPTIONS = [
-  { label: 'ios', value: 'ios' },
-  { label: 'android', value: 'android' },
-] as const satisfies ReadonlyArray<{ label: string, value: MobilePlatform }>
-
-// -----------------------------------------------------------------------------
-// Prompt helpers
-// -----------------------------------------------------------------------------
-
-type TextPrompt = (input: PromptWithHintInput) => Promise<string>
-
-type PublishedBundleHint = {
-  channel: string
-  bundleId?: string
-  checked: boolean
-}
-
-type ExistingPublishedBundleCheck = {
-  channel: string
-  checked: boolean
-  unavailableReason?: string
-  release?: ReleaseItem
-}
-
-function isInteractiveTerminal() {
-  return Boolean(stdin.isTTY && stdout.isTTY)
-}
-
-async function printBundleProjectContext(context: CommandContext) {
-  const project = await resolveProject(context).catch(() => null)
-
-  if (!project) {
-    return
-  }
-
-  for (const line of formatProjectConfigSummary(project).split('\n')) {
-    console.log(line)
-  }
-
-  console.log('')
-}
-
-function isVerboseOutput(options: Record<string, string | boolean>) {
-  return readBooleanOption(options, 'verbose', false, ['v'])
-}
-
-function formatBundleDirectoryHint(input: {
-  cwd: string
-  outputDir: string
-}) {
-  const relativeOutputDir = path.relative(input.cwd, input.outputDir)
-  const displayPath = relativeOutputDir && !relativeOutputDir.startsWith('..') && !path.isAbsolute(relativeOutputDir)
-    ? relativeOutputDir
-    : input.outputDir
-
-  return `Generated bundle folder: ${displayPath}`
-}
-
-function resolveManifestRuntimeVersion(manifest: BundleManifest | null, platform: MobilePlatform) {
-  if (!manifest || manifest.platform !== platform) {
-    return undefined
-  }
-
-  return manifest.runtimeVersion
-}
-
-function resolveManifestBundleId(
-  manifest: BundleManifest | null,
-  platform: MobilePlatform,
-) {
-  if (!manifest || manifest.platform !== platform) {
-    return undefined
-  }
-
-  return manifest.bundleId
-}
-
-async function resolveBundleRuntimeVersionInput(input: {
-  context: CommandContext
-  options: Record<string, string | boolean>
-  platform: MobilePlatform
-  manifest: BundleManifest | null
-  isInteractive?: boolean
-  prompt?: TextPrompt
-  detectRuntimeVersion?: (cwd: string, platform: MobilePlatform) => Promise<string>
-}) {
-  const explicitRuntimeVersion = readStringOption(input.options, 'runtime-version')
-
-  if (explicitRuntimeVersion) {
-    return explicitRuntimeVersion
-  }
-
-  if (!input.isInteractive) {
-    return undefined
-  }
-
-  const prompt = input.prompt ?? promptWithHint
-  const detectRuntimeVersion = input.detectRuntimeVersion ?? resolveProjectRuntimeVersion
-  const activeRuntimeVersion = await detectRuntimeVersion(input.context.cwd, input.platform).catch(() => undefined)
-  const currentRuntimeVersion = resolveManifestRuntimeVersion(input.manifest, input.platform)
-  const hintLines = [
-    activeRuntimeVersion
-      ? `Active runtime version: ${activeRuntimeVersion}`
-      : 'Active runtime version could not be detected automatically.',
-    currentRuntimeVersion && currentRuntimeVersion !== activeRuntimeVersion
-      ? `Current bundle runtime version: ${currentRuntimeVersion}`
-      : undefined,
-    'Press Enter to use the active runtime version, or type another exact runtime version.',
-  ].filter(Boolean)
-  const answer = await prompt({
-    question: 'Runtime version',
-    fallback: activeRuntimeVersion,
-    hint: hintLines.join('\n'),
-  })
-
-  return answer.trim() || undefined
-}
-
-async function resolveBundleIdInput(input: {
-  options: Record<string, string | boolean>
-  platform: MobilePlatform
-  runtimeVersion?: string
-  manifest: BundleManifest | null
-  publishedBundle?: PublishedBundleHint
-  isInteractive?: boolean
-  prompt?: TextPrompt
-}) {
-  const explicitBundleId = readStringOption(input.options, 'bundle-id')
-    ?? readStringOption(input.options, 'version')
-
-  if (explicitBundleId) {
-    return {
-      bundleId: explicitBundleId,
-      bundleIdSource: 'flag' as const,
-    }
-  }
-
-  if (
-    readBooleanOption(input.options, 'bundle-from-package', false)
-    || !input.isInteractive
-  ) {
-    return {
-      bundleId: undefined,
-      bundleIdSource: undefined,
-    }
-  }
-
-  const prompt = input.prompt ?? promptWithHint
-  const currentBundleId = resolveManifestBundleId(
-    input.manifest,
-    input.platform,
-  )
-  const hintLines = [
-    currentBundleId
-      ? `Local bundle ID: ${currentBundleId}`
-      : 'No local bundle ID found for this platform.',
-    formatPublishedBundleHint(input.publishedBundle),
-    'Type the bundle ID to release, or press Enter to generate one from runtimeVersion and the bundle hash.',
-  ].filter(Boolean)
-  const publishedBundleId = input.publishedBundle?.bundleId
-  const answer = await prompt({
-    question: 'Bundle ID',
-    hint: hintLines.join('\n'),
-    example: currentBundleId || publishedBundleId
-      ? undefined
-      : `${input.runtimeVersion ?? '1.0.0'}-web.1`,
-  })
-  const bundleId = answer.trim()
-
-  return {
-    bundleId: bundleId || undefined,
-    bundleIdSource: bundleId ? 'prompt' as const : undefined,
-  }
-}
-
-function formatPublishedBundleHint(publishedBundle?: PublishedBundleHint) {
-  if (!publishedBundle) {
-    return undefined
-  }
-
-  if (!publishedBundle.checked) {
-    return `Published bundle ID (${publishedBundle.channel}): unavailable.`
-  }
-
-  if (!publishedBundle.bundleId) {
-    return `Published bundle ID (${publishedBundle.channel}): none found.`
-  }
-
-  return `Published bundle ID (${publishedBundle.channel}): ${publishedBundle.bundleId}`
-}
-
-function resolvePublishedBundleIdFromReleases(releases: ReleaseItem[]) {
-  const activeRelease = releases.find(item => item.isActive)
-
-  if (activeRelease) {
-    return activeRelease.bundleId
-  }
-
-  return [...releases]
-    .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt))
-    .at(0)
-    ?.bundleId
-}
-
-function findExistingPublishedBundle(input: {
-  releases: ReleaseItem[]
-  platform: MobilePlatform
-  channel: string
-  runtimeVersion: string
-  bundleId: string
-}) {
-  return input.releases.find(item =>
-    item.platform === input.platform
-    && item.channel === input.channel
-    && item.runtimeVersion === input.runtimeVersion
-    && item.bundleId === input.bundleId,
-  )
-}
-
-async function resolvePublishedBundleHint(input: {
-  context: CommandContext
-  options: Record<string, string | boolean>
-  platform: MobilePlatform
-  runtimeVersion?: string
-  loadPublishedBundleId?: (input: {
-    channel: string
-    platform: MobilePlatform
-    runtimeVersion: string
-  }) => Promise<string | undefined>
-}): Promise<PublishedBundleHint | undefined> {
-  if (!input.runtimeVersion) {
-    return undefined
-  }
-
-  const channel = readStringOption(input.options, 'channel') ?? 'production'
-
-  try {
-    if (input.loadPublishedBundleId) {
-      return {
-        channel,
-        bundleId: await input.loadPublishedBundleId({
-          channel,
-          platform: input.platform,
-          runtimeVersion: input.runtimeVersion,
-        }),
-        checked: true,
-      }
-    }
-
-    const api = await resolveApiConfig(input.options)
-    const project = await resolveProject(input.context)
-
-    await assertReleaseContextMatchesConfig({
-      apiUrl: api.apiUrl,
-      apiKey: api.apiKey,
-      organizationSlug: project.organizationSlug,
-      projectSlug: project.projectSlug,
-    })
-
-    const releases = await listReleases({
-      apiUrl: api.apiUrl,
-      apiKey: api.apiKey,
-      appId: project.appId,
-      platform: input.platform,
-      channel,
-      runtimeVersion: input.runtimeVersion,
-    })
-
-    return {
-      channel,
-      bundleId: resolvePublishedBundleIdFromReleases(releases),
-      checked: true,
-    }
-  } catch {
-    return {
-      channel,
-      checked: false,
-    }
-  }
-}
-
-async function resolveExistingPublishedBundleCheck(input: {
-  context: CommandContext
-  options: Record<string, string | boolean>
-  platform: MobilePlatform
-  runtimeVersion: string
-  bundleId: string
-  loadExistingBundle?: (input: {
-    channel: string
-    platform: MobilePlatform
-    runtimeVersion: string
-    bundleId: string
-  }) => Promise<ReleaseItem | undefined>
-}): Promise<ExistingPublishedBundleCheck> {
-  const channel = readStringOption(input.options, 'channel') ?? 'production'
-
-  try {
-    if (input.loadExistingBundle) {
-      return {
-        channel,
-        checked: true,
-        release: await input.loadExistingBundle({
-          channel,
-          platform: input.platform,
-          runtimeVersion: input.runtimeVersion,
-          bundleId: input.bundleId,
-        }),
-      }
-    }
-
-    const api = await resolveApiConfig(input.options)
-    const project = await resolveProject(input.context)
-
-    await assertReleaseContextMatchesConfig({
-      apiUrl: api.apiUrl,
-      apiKey: api.apiKey,
-      organizationSlug: project.organizationSlug,
-      projectSlug: project.projectSlug,
-    })
-
-    const releases = await listReleases({
-      apiUrl: api.apiUrl,
-      apiKey: api.apiKey,
-      appId: project.appId,
-      platform: input.platform,
-      channel,
-      runtimeVersion: input.runtimeVersion,
-      bundleId: input.bundleId,
-    })
-
-    return {
-      channel,
-      checked: true,
-      release: findExistingPublishedBundle({
-        releases,
-        platform: input.platform,
-        channel,
-        runtimeVersion: input.runtimeVersion,
-        bundleId: input.bundleId,
-      }),
-    }
-  } catch (error) {
-    return {
-      channel,
-      checked: false,
-      unavailableReason: error instanceof Error ? error.message : String(error),
-    }
-  }
-}
-
-function assertNoExistingPublishedBundle(input: ExistingPublishedBundleCheck) {
-  if (!input.release) {
-    return
-  }
-
-  throw new Error(
-    `Bundle ID "${input.release.bundleId}" already exists for ${input.release.platform} `
-    + `channel "${input.release.channel}" and runtimeVersion "${input.release.runtimeVersion}". `
-    + 'Choose a new bundle ID before running `otalan bundle`.',
-  )
-}
-
-function warnUnavailableExistingPublishedBundleCheck(input: {
-  check: ExistingPublishedBundleCheck
-  platform: MobilePlatform
-  runtimeVersion: string
-  bundleId: string
-}) {
-  if (input.check.checked) {
-    return
-  }
-
-  if (
-    input.check.unavailableReason?.startsWith('No OTA Publish Key configured.')
-    || input.check.unavailableReason?.startsWith('Missing otalan.config.json.')
-  ) {
-    return
-  }
-
-  console.warn(
-    `Unable to verify whether bundle ID "${input.bundleId}" already exists for ${input.platform} `
-    + `channel "${input.check.channel}" and runtimeVersion "${input.runtimeVersion}". `
-    + 'Continuing without the duplicate-bundle guardrail.',
-  )
-}
-
-// -----------------------------------------------------------------------------
-// Command
-// -----------------------------------------------------------------------------
+import { promptSelectWithHint } from '../cli/prompts'
+import { printSuccess } from '../cli/ui'
+import {
+  assertNoExistingPublishedBundle,
+  findExistingPublishedBundle,
+  formatBundleDirectoryHint,
+  formatPublishedBundleHint,
+  isInteractiveTerminal,
+  isVerboseOutput,
+  PLATFORM_OPTIONS,
+  printBundleProjectContext,
+  resolveBundleIdInput,
+  resolveBundleRuntimeVersionInput,
+  resolveExistingPublishedBundleCheck,
+  resolveManifestBundleId,
+  resolveManifestRuntimeVersion,
+  resolvePublishedBundleHint,
+  resolvePublishedBundleIdFromReleases,
+  TARGET_OPTIONS,
+  warnUnavailableExistingPublishedBundleCheck,
+} from './bundle-input'
 
 export async function handleBundle(context: CommandContext, options: Record<string, string | boolean>) {
   const verbose = isVerboseOutput(options)
@@ -430,13 +44,10 @@ export async function handleBundle(context: CommandContext, options: Record<stri
     : await promptSelectWithHint({
       question: 'Target',
       fallback: 'capacitor',
-      hint: 'OTA client type: capacitor or expo. Use expo for Expo projects.',
+      hint: 'OTA client type: capacitor or expo.',
       options: TARGET_OPTIONS,
     })
-  const target = resolveTarget(
-    options,
-    targetFallback,
-  )
+  const target = resolveTarget(options, targetFallback)
   const platformFallback = readStringOption(options, 'platform')
     ? undefined
     : await promptSelectWithHint({
@@ -444,10 +55,7 @@ export async function handleBundle(context: CommandContext, options: Record<stri
       hint: 'Target mobile platform: ios or android.',
       options: PLATFORM_OPTIONS,
     })
-  const platform = resolvePlatform(
-    options,
-    platformFallback,
-  )
+  const platform = resolvePlatform(options, platformFallback)
   const interactive = isInteractiveTerminal()
   const outputDir = path.resolve(
     context.cwd,
@@ -506,6 +114,7 @@ export async function handleBundle(context: CommandContext, options: Record<stri
       runtimeVersion,
       platform,
       target,
+      verbose,
       beforeWrite: async manifest => {
         const existingBundleCheck = await resolveExistingPublishedBundleCheck({
           context,
@@ -531,7 +140,7 @@ export async function handleBundle(context: CommandContext, options: Record<stri
   }
 
   console.log('')
-  console.log('✅ Bundle created')
+  printSuccess('Bundle created')
   console.log(formatBundleDirectoryHint({
     cwd: context.cwd,
     outputDir,
@@ -550,21 +159,17 @@ export async function handleBundle(context: CommandContext, options: Record<stri
   printJson(result)
 }
 
-// -----------------------------------------------------------------------------
-// Test helpers
-// -----------------------------------------------------------------------------
-
 export const bundleCommandTestUtils = {
+  assertNoExistingPublishedBundle,
+  findExistingPublishedBundle,
+  formatBundleDirectoryHint,
   formatPublishedBundleHint,
   resolveBundleIdInput,
   resolveBundleRuntimeVersionInput,
+  resolveExistingPublishedBundleCheck,
   resolveManifestBundleId,
   resolveManifestRuntimeVersion,
-  assertNoExistingPublishedBundle,
-  findExistingPublishedBundle,
-  resolveExistingPublishedBundleCheck,
-  resolvePublishedBundleIdFromReleases,
   resolvePublishedBundleHint,
+  resolvePublishedBundleIdFromReleases,
   warnUnavailableExistingPublishedBundleCheck,
-  formatBundleDirectoryHint,
 }

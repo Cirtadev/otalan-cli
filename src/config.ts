@@ -7,13 +7,11 @@ import { z } from 'zod'
 export type Target = 'capacitor' | 'expo'
 export type MobilePlatform = 'ios' | 'android'
 
-// -----------------------------------------------------------------------------
-// Schemas
-// -----------------------------------------------------------------------------
+export const DEFAULT_API_URL = 'https://api.otalan.com'
 
 const globalConfigSchema = z.object({
   apiKey: z.string().min(1),
-  apiUrl: z.url().default('https://api.otalan.com'),
+  apiUrl: z.url().default(DEFAULT_API_URL),
 })
 
 const projectConfigSchema = z.object({
@@ -26,19 +24,11 @@ const projectConfigSchema = z.object({
 export type GlobalConfig = z.infer<typeof globalConfigSchema>
 export type ProjectConfig = z.infer<typeof projectConfigSchema>
 
-// -----------------------------------------------------------------------------
-// Paths
-// -----------------------------------------------------------------------------
-
 export const PROJECT_CONFIG_FILE = 'otalan.config.json'
 
 function getGlobalConfigPath(homeDir = os.homedir()) {
   return path.join(homeDir, '.otalan', 'config.json')
 }
-
-// -----------------------------------------------------------------------------
-// JSON helpers
-// -----------------------------------------------------------------------------
 
 async function readJsonFile<T>(filePath: string, schema: z.ZodType<T>) {
   const raw = await Bun.file(filePath).text()
@@ -69,10 +59,6 @@ async function writeJsonFile(filePath: string, value: unknown, options: { dirMod
 
   await Bun.write(filePath, content)
 }
-
-// -----------------------------------------------------------------------------
-// Public helpers
-// -----------------------------------------------------------------------------
 
 export async function loadGlobalConfig() {
   return readJsonFile(getGlobalConfigPath(), globalConfigSchema)

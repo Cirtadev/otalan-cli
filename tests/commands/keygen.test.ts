@@ -1,17 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
 import { generateOtalanKey, keygenCommandTestUtils } from '../../src/commands/keygen'
-
-// -----------------------------------------------------------------------------
-// Fixtures
-// -----------------------------------------------------------------------------
+import { stripAnsi } from '../helpers/ansi'
 
 const KEY_BYTES = Buffer.from(Array.from({ length: 24 }, (_, index) => index))
 const KEY_SUFFIX = KEY_BYTES.toString('base64url')
-
-// -----------------------------------------------------------------------------
-// Key generation
-// -----------------------------------------------------------------------------
 
 describe('generateOtalanKey', () => {
   test('generates OTA Publish Keys with the Otalan publish prefix and 24 base64url-encoded random bytes', () => {
@@ -45,10 +38,6 @@ describe('generateOtalanKey', () => {
   })
 })
 
-// -----------------------------------------------------------------------------
-// Command helpers
-// -----------------------------------------------------------------------------
-
 describe('keygenCommandTestUtils.resolveKeyKind', () => {
   test('accepts known key kinds', () => {
     expect(keygenCommandTestUtils.resolveKeyKind('ci')).toBe('ci')
@@ -66,14 +55,13 @@ describe('keygenCommandTestUtils.formatKeygenOutput', () => {
   test('prints the full key and suffix on copyable lines', () => {
     const key = generateOtalanKey('ci', KEY_BYTES)
 
-    expect(keygenCommandTestUtils.formatKeygenOutput(key)).toBe([
-      'Generated OTA Publish Key.',
+    expect(stripAnsi(keygenCommandTestUtils.formatKeygenOutput(key))).toBe([
+      '✓ Generated OTA Publish Key',
       '',
-      'Full key:',
-      `otalan_ci_${KEY_SUFFIX}`,
-      '',
-      'Key without prefix:',
-      KEY_SUFFIX,
+      '┌────────────────┬────────────────────────────────────────────┐',
+      `│ Full key       │ otalan_ci_${KEY_SUFFIX} │`,
+      `│ Without prefix │ ${KEY_SUFFIX}           │`,
+      '└────────────────┴────────────────────────────────────────────┘',
     ].join('\n'))
   })
 })

@@ -1,6 +1,7 @@
 import path from 'node:path'
 
 import {
+  DEFAULT_API_URL,
   PROJECT_CONFIG_FILE,
   loadGlobalConfig,
   loadProjectConfig,
@@ -26,7 +27,7 @@ export type BundleArchive = {
   body: Blob
 }
 
-export function resolveApiKeysUrl(apiUrl = 'https://api.otalan.com') {
+export function resolveApiKeysUrl(apiUrl = DEFAULT_API_URL) {
   const url = new URL(apiUrl)
 
   if (url.hostname === 'api.otalan.com') {
@@ -47,7 +48,7 @@ export function resolveApiKeysUrl(apiUrl = 'https://api.otalan.com') {
 export async function resolveApiConfig(options: Record<string, string | boolean>) {
   const stored = await loadGlobalConfig().catch(() => null)
   const apiKey = readStringOption(options, 'api-key') ?? stored?.apiKey
-  const apiUrl = readStringOption(options, 'api-url') ?? stored?.apiUrl ?? 'https://api.otalan.com'
+  const apiUrl = readStringOption(options, 'api-url') ?? stored?.apiUrl ?? DEFAULT_API_URL
 
   if (!apiKey) {
     throw new Error('No OTA Publish Key configured. Run `otalan login` first or pass --api-key.')

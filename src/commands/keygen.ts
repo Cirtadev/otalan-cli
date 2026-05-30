@@ -2,10 +2,8 @@ import { randomBytes } from 'node:crypto'
 
 import { readStringOption } from '../cli/args'
 import { promptSelectWithHint } from '../cli/prompts'
-
-// -----------------------------------------------------------------------------
-// Constants
-// -----------------------------------------------------------------------------
+import { formatKeyValueTable } from '../cli/table'
+import { formatSuccess } from '../cli/ui'
 
 const KEY_BYTE_LENGTH = 24
 
@@ -13,10 +11,6 @@ const KEY_KIND_OPTIONS = [
   { label: 'OTA Publish Key', value: 'ci' },
   { label: 'OTA App Key', value: 'ota' },
 ] as const satisfies ReadonlyArray<{ label: string, value: KeyKind }>
-
-// -----------------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------------
 
 export type KeyKind = 'ci' | 'ota'
 
@@ -26,10 +20,6 @@ export type GeneratedOtalanKey = {
   suffix: string
   fullKey: string
 }
-
-// -----------------------------------------------------------------------------
-// Key helpers
-// -----------------------------------------------------------------------------
 
 function resolveKeyPrefix(kind: KeyKind) {
   return kind === 'ci' ? 'otalan_ci' : 'otalan_ota'
@@ -65,19 +55,14 @@ function formatKeyKindLabel(kind: KeyKind) {
 
 function formatKeygenOutput(key: GeneratedOtalanKey) {
   return [
-    `Generated ${formatKeyKindLabel(key.kind)}.`,
+    formatSuccess(`Generated ${formatKeyKindLabel(key.kind)}`),
     '',
-    'Full key:',
-    key.fullKey,
-    '',
-    'Key without prefix:',
-    key.suffix,
+    formatKeyValueTable([
+      ['Full key', key.fullKey],
+      ['Without prefix', key.suffix],
+    ]),
   ].join('\n')
 }
-
-// -----------------------------------------------------------------------------
-// Command
-// -----------------------------------------------------------------------------
 
 export async function handleKeygen(options: Record<string, string | boolean>) {
   const kindOption = readStringOption(options, 'kind')
@@ -91,10 +76,6 @@ export async function handleKeygen(options: Record<string, string | boolean>) {
 
   console.log(formatKeygenOutput(key))
 }
-
-// -----------------------------------------------------------------------------
-// Test helpers
-// -----------------------------------------------------------------------------
 
 export const keygenCommandTestUtils = {
   formatKeygenOutput,

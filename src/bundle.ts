@@ -1,236 +1,56 @@
-import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises'
+import { rm } from 'node:fs/promises'
 import path from 'node:path'
 
-import { zipSync } from 'fflate'
+import { findNativeBundleEntries } from './bundle-validation'
+import {
+  assertLocalExpoCliAvailable,
+  buildExpoAssetManifest,
+  createExpoExportDirectory,
+  findRuntimeVersionInObject,
+  readExpoConfig,
+  readExpoExportRuntimeVersion,
+  resolveExpoConfiguredVersion,
+  resolveExpoRuntimeVersion,
+} from './bundle-expo'
+import {
+  collectDirectoryEntries,
+  hashBytes,
+  pathIsDirectory,
+  readPackageVersion,
+  writeBundleOutput,
+  zipDirectory,
+} from './bundle-files'
+import {
+  createAutoBundleId,
+  createBundleArchiveFileName,
+  formatOmittedSourceMapCount,
+  normalizeBundleId,
+  resolveBundleId,
+} from './bundle-id'
+import {
+  resolveCapacitorRuntimeVersion,
+  resolveProjectRuntimeVersion,
+} from './bundle-runtime'
+import {
+  LEGACY_BUNDLE_ARCHIVE_FILE_NAME,
+  type BundleOptions,
+  type BundleResult,
+  type CapacitorBundleManifest,
+  type ExpoBundleManifest,
+} from './bundle-types'
 
-import { assertNoNativeBundleEntries, findNativeBundleEntries } from './bundle-validation'
-import type { MobilePlatform, Target } from './config'
-
-// -----------------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------------
-
-type BundleBaseManifest = {
-  target: Target
-  hash: string
-  runtimeVersion: string
-  bundleId: string
-  createdAt: string
-  platform: MobilePlatform
+export {
+  createBundleArchiveFileName,
+  formatOmittedSourceMapCount,
+  LEGACY_BUNDLE_ARCHIVE_FILE_NAME,
+  resolveProjectRuntimeVersion,
 }
-
-type JsonObject = Record<string, unknown>
-
-export type CapacitorBundleManifest = BundleBaseManifest & {
-  target: 'capacitor'
-}
-
-export type ExpoBundleManifest = BundleBaseManifest & {
-  target: 'expo'
-  launchAsset: string
-  assets: string[]
-  expoConfig: JsonObject
-}
-
-export type BundleManifest = CapacitorBundleManifest | ExpoBundleManifest
-export type BundleIdSource = 'flag' | 'prompt' | 'runtime-version' | 'package-json'
-
-export const LEGACY_BUNDLE_ARCHIVE_FILE_NAME = 'bundle.zip'
-
-type BundleOptions = {
-  cwd: string
-  outputDir: string
-  bundleId?: string
-  bundleFromPackage?: boolean
-  explicitBundleIdSource?: Extract<BundleIdSource, 'flag' | 'prompt'>
-  runtimeVersion?: string
-  inputDir?: string
-  platform: MobilePlatform
-  target: Target
-  beforeWrite?: (manifest: BundleManifest) => Promise<void>
-}
-
-const ZIP_COMPRESSION_LEVEL = 6
-const MAX_RUNTIME_VERSION_SEARCH_DEPTH = 32
-
-type BundleResult = {
-  outputDir: string
-  archiveFileName: string
-  manifest: BundleManifest
-  bundleIdSource: BundleIdSource
-  omittedSourceMapCount: number
-}
-
-type CollectDirectoryEntriesOptions = {
-  shouldOmitFile?: (relativePath: string) => boolean
-  omittedPaths?: string[]
-}
-
-type ZipDirectoryResult = {
-  bytes: Uint8Array
-  omittedSourceMapCount: number
-}
-
-// -----------------------------------------------------------------------------
-// File helpers
-// -----------------------------------------------------------------------------
-
-async function pathExists(filePath: string) {
-  return Bun.file(filePath).exists()
-}
-
-async function readTextFileIfExists(filePath: string) {
-  if (!(await pathExists(filePath))) {
-    return null
-  }
-
-  return Bun.file(filePath).text()
-}
-
-async function pathIsDirectory(directoryPath: string) {
-  try {
-    await readdir(directoryPath)
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function collectDirectoryEntries(
-  rootDir: string,
-  currentDir = rootDir,
-  options: CollectDirectoryEntriesOptions = {},
-) {
-  const entries: Record<string, Uint8Array> = {}
-  const items = (await readdir(currentDir, { withFileTypes: true }))
-    .sort((left, right) => {
-      if (left.name < right.name) {
-        return -1
-      }
-
-      if (left.name > right.name) {
-        return 1
-      }
-
-      return 0
-    })
-
-  for (const item of items) {
-    const absolutePath = path.join(currentDir, item.name)
-
-    if (item.isDirectory()) {
-      const nestedEntries = await collectDirectoryEntries(rootDir, absolutePath, options)
-
-      Object.assign(entries, nestedEntries)
-      continue
-    }
-
-    if (!item.isFile()) {
-      continue
-    }
-
-    const relativePath = path
-      .relative(rootDir, absolutePath)
-      .split(path.sep)
-      .join(path.posix.sep)
-
-    if (options.shouldOmitFile?.(relativePath)) {
-      options.omittedPaths?.push(relativePath)
-      continue
-    }
-
-    entries[relativePath] = new Uint8Array(await Bun.file(absolutePath).arrayBuffer())
-  }
-
-  return entries
-}
-
-function isSourceMapPath(relativePath: string) {
-  return relativePath.endsWith('.map')
-}
-
-export function formatOmittedSourceMapCount(count: number) {
-  return count === 1
-    ? 'Omitted 1 source map file from bundle ZIP.'
-    : `Omitted ${count} source map files from bundle ZIP.`
-}
-
-async function zipDirectory(directoryPath: string): Promise<ZipDirectoryResult> {
-  const omittedSourceMapPaths: string[] = []
-  const entries = await collectDirectoryEntries(directoryPath, directoryPath, {
-    shouldOmitFile: isSourceMapPath,
-    omittedPaths: omittedSourceMapPaths,
-  })
-
-  if (Object.keys(entries).length === 0) {
-    if (omittedSourceMapPaths.length > 0) {
-      throw new Error(`No bundle files found in ${directoryPath} after omitting ${omittedSourceMapPaths.length} source map file(s).`)
-    }
-
-    throw new Error(`No files found in ${directoryPath}`)
-  }
-
-  assertNoNativeBundleEntries(directoryPath, Object.keys(entries))
-
-  return {
-    bytes: await zipEntries(entries),
-    omittedSourceMapCount: omittedSourceMapPaths.length,
-  }
-}
-
-function zipEntries(entries: Record<string, Uint8Array>) {
-  return zipSync(entries, {
-    level: ZIP_COMPRESSION_LEVEL,
-  })
-}
-
-function hashBytes(bytes: Uint8Array) {
-  return createHash('sha256').update(bytes).digest('hex')
-}
-
-function normalizeBundleId(seed: string) {
-  const normalizedSeed = seed
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    || 'bundle'
-
-  return normalizedSeed
-}
-
-export function createBundleArchiveFileName(bundleId: string) {
-  return `bundle-${normalizeBundleId(bundleId)}.zip`
-}
-
-function createAutoBundleId(seed: string, hash: string) {
-  return `${normalizeBundleId(seed)}-${hash.slice(0, 12)}`
-}
-
-async function writeBundleOutput(outputDir: string, bundleBytes: Uint8Array, manifest: BundleManifest) {
-  const archiveFileName = createBundleArchiveFileName(manifest.bundleId)
-
-  await mkdir(outputDir, { recursive: true })
-  await rm(path.join(outputDir, LEGACY_BUNDLE_ARCHIVE_FILE_NAME), { force: true })
-  await Bun.write(path.join(outputDir, archiveFileName), bundleBytes)
-  await Bun.write(path.join(outputDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-
-  return archiveFileName
-}
-
-async function readPackageVersion(cwd: string) {
-  const packageJsonPath = path.join(cwd, 'package.json')
-
-  if (!(await pathExists(packageJsonPath))) {
-    return undefined
-  }
-
-  const raw = JSON.parse(await Bun.file(packageJsonPath).text()) as {
-    version?: string
-  }
-
-  return raw.version
-}
+export type {
+  BundleIdSource,
+  BundleManifest,
+  CapacitorBundleManifest,
+  ExpoBundleManifest,
+} from './bundle-types'
 
 function resolveCapacitorInputDir(cwd: string, inputDir?: string) {
   const candidates = inputDir
@@ -250,528 +70,65 @@ async function resolveFirstDirectory(paths: string[]) {
   return null
 }
 
-// -----------------------------------------------------------------------------
-// Command helpers
-// -----------------------------------------------------------------------------
+type CommandRunOptions = {
+  verbose?: boolean
+}
 
-async function runCommand(command: string, args: string[], cwd: string) {
+async function readProcessStream(stream: ReadableStream<Uint8Array> | null | undefined) {
+  return stream ? await new Response(stream).text() : ''
+}
+
+function truncateProcessOutput(value: string) {
+  const trimmed = value.trim()
+  const maxLength = 4_000
+
+  if (trimmed.length <= maxLength) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, maxLength)}\n...`
+}
+
+function formatCommandFailure(commandLine: string, exitCode: number, output: { stderr: string, stdout: string }) {
+  const details = [
+    output.stderr ? `stderr:\n${truncateProcessOutput(output.stderr)}` : undefined,
+    output.stdout ? `stdout:\n${truncateProcessOutput(output.stdout)}` : undefined,
+  ].filter(Boolean).join('\n\n')
+
+  if (!details) {
+    return `${commandLine} exited with code ${exitCode}`
+  }
+
+  return `${commandLine} exited with code ${exitCode}\n\n${details}`
+}
+
+async function runCommand(command: string, args: string[], cwd: string, options: CommandRunOptions = {}) {
+  const verbose = options.verbose ?? false
   const proc = Bun.spawn([command, ...args], {
     cwd,
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
+    stdin: verbose ? 'inherit' : 'ignore',
+    stdout: verbose ? 'inherit' : 'pipe',
+    stderr: verbose ? 'inherit' : 'pipe',
   })
-  const exitCode = await proc.exited
+  const stdoutPromise = verbose
+    ? Promise.resolve('')
+    : readProcessStream(proc.stdout)
+  const stderrPromise = verbose
+    ? Promise.resolve('')
+    : readProcessStream(proc.stderr)
+  const [exitCode, stdoutText, stderrText] = await Promise.all([
+    proc.exited,
+    stdoutPromise,
+    stderrPromise,
+  ])
 
   if (exitCode !== 0) {
-    throw new Error(`${command} ${args.join(' ')} exited with code ${exitCode}`)
+    throw new Error(formatCommandFailure(`${command} ${args.join(' ')}`, exitCode, {
+      stderr: stderrText,
+      stdout: stdoutText,
+    }))
   }
 }
-
-async function assertLocalExpoCliAvailable(cwd: string) {
-  const candidates = [
-    path.join(cwd, 'node_modules', '.bin', 'expo'),
-    path.join(cwd, 'node_modules', '.bin', 'expo.cmd'),
-    path.join(cwd, 'node_modules', 'expo', 'package.json'),
-  ]
-
-  for (const candidate of candidates) {
-    if (await Bun.file(candidate).exists()) {
-      return
-    }
-  }
-
-  throw new Error('Expo CLI is required for Expo bundles. Install the project dependencies before running `otalan bundle --target expo`.')
-}
-
-type ExpoConfig = JsonObject & {
-  runtimeVersion?: ExpoRuntimeVersionConfig
-  sdkVersion?: string
-  version?: string
-  ios?: JsonObject & {
-    version?: string
-    buildNumber?: string
-    runtimeVersion?: ExpoRuntimeVersionConfig
-  }
-  android?: JsonObject & {
-    version?: string
-    versionCode?: string | number
-    runtimeVersion?: ExpoRuntimeVersionConfig
-  }
-}
-
-type ExpoRuntimeVersionConfig = string | {
-  policy?: string
-}
-
-// -----------------------------------------------------------------------------
-// Expo config helpers
-// -----------------------------------------------------------------------------
-
-async function readExpoConfig(cwd: string): Promise<ExpoConfig> {
-  await assertLocalExpoCliAvailable(cwd)
-
-  const proc = Bun.spawn(['bunx', 'expo', 'config', '--json'], {
-    cwd,
-    stdout: 'pipe',
-    stderr: 'inherit',
-  })
-  const exitCode = await proc.exited
-
-  if (exitCode !== 0) {
-    throw new Error(`bunx expo config --json exited with code ${exitCode}`)
-  }
-
-  const output = await new Response(proc.stdout).text()
-
-  const parsed = JSON.parse(output) as ExpoConfig & {
-    exp?: ExpoConfig
-    expo?: ExpoConfig
-  }
-
-  return parsed.exp ?? parsed.expo ?? parsed
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-
-  const normalized = value.trim()
-  return normalized.length > 0 ? normalized : undefined
-}
-
-function resolveExpoConfiguredVersion(config: ExpoConfig, platform: MobilePlatform) {
-  return normalizeOptionalString(
-    platform === 'ios'
-      ? config.ios?.version ?? config.version
-      : config.android?.version ?? config.version,
-  )
-}
-
-function resolveExpoRuntimeVersionPolicy(
-  config: ExpoConfig,
-  platform: MobilePlatform,
-  policy: string,
-) {
-  const appVersion = resolveExpoConfiguredVersion(config, platform)
-
-  switch (policy) {
-    case 'appVersion': {
-      if (!appVersion) {
-        throw new Error('Unable to resolve Expo runtimeVersion policy "appVersion". Set version in Expo config or pass --runtime-version.')
-      }
-
-      return appVersion
-    }
-    case 'sdkVersion': {
-      const sdkVersion = normalizeOptionalString(config.sdkVersion)
-
-      if (!sdkVersion) {
-        throw new Error('Unable to resolve Expo runtimeVersion policy "sdkVersion". Set sdkVersion in Expo config or pass --runtime-version.')
-      }
-
-      return `exposdk:${sdkVersion}`
-    }
-    default:
-      throw new Error(`Unable to resolve Expo runtimeVersion policy "${policy}". Pass --runtime-version or use a resolved Expo runtimeVersion.`)
-  }
-}
-
-function findRuntimeVersionInObject(value: unknown, depth = 0): string | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-
-  if (depth > MAX_RUNTIME_VERSION_SEARCH_DEPTH) {
-    return undefined
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const resolved = findRuntimeVersionInObject(item, depth + 1)
-
-      if (resolved) {
-        return resolved
-      }
-    }
-
-    return undefined
-  }
-
-  const record = value as Record<string, unknown>
-  const runtimeVersion = normalizeOptionalString(record.runtimeVersion)
-
-  if (runtimeVersion) {
-    return runtimeVersion
-  }
-
-  for (const nestedValue of Object.values(record)) {
-    const resolved = findRuntimeVersionInObject(nestedValue, depth + 1)
-
-    if (resolved) {
-      return resolved
-    }
-  }
-
-  return undefined
-}
-
-function findKnownExpoMetadataRuntimeVersion(value: unknown, platform: MobilePlatform) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined
-  }
-
-  const metadata = value as Record<string, unknown>
-  const runtimeVersion = normalizeOptionalString(metadata.runtimeVersion)
-
-  if (runtimeVersion) {
-    return runtimeVersion
-  }
-
-  const platforms = metadata.platforms
-
-  if (!platforms || typeof platforms !== 'object' || Array.isArray(platforms)) {
-    return undefined
-  }
-
-  const platformMetadata = (platforms as Record<string, unknown>)[platform]
-
-  if (!platformMetadata || typeof platformMetadata !== 'object' || Array.isArray(platformMetadata)) {
-    return undefined
-  }
-
-  return normalizeOptionalString((platformMetadata as Record<string, unknown>).runtimeVersion)
-}
-
-async function readExpoExportRuntimeVersion(exportDir: string, platform: MobilePlatform) {
-  const metadataPath = path.join(exportDir, 'metadata.json')
-  const contents = await readTextFileIfExists(metadataPath)
-
-  if (!contents) {
-    return undefined
-  }
-
-  try {
-    const metadata = JSON.parse(contents) as unknown
-    return findKnownExpoMetadataRuntimeVersion(metadata, platform)
-      ?? findRuntimeVersionInObject(metadata)
-  } catch {
-    return undefined
-  }
-}
-
-function resolveExpoRuntimeVersion(
-  config: ExpoConfig,
-  platform: MobilePlatform,
-  runtimeVersion?: string,
-  exportedRuntimeVersion?: string,
-  fallbackRuntimeVersion?: string,
-) {
-  if (runtimeVersion?.trim()) {
-    return runtimeVersion.trim()
-  }
-
-  if (exportedRuntimeVersion?.trim()) {
-    return exportedRuntimeVersion.trim()
-  }
-
-  const resolved = platform === 'ios'
-    ? config.ios?.runtimeVersion ?? config.runtimeVersion
-    : config.android?.runtimeVersion ?? config.runtimeVersion
-
-  if (typeof resolved === 'string' && resolved.trim()) {
-    return resolved.trim()
-  }
-
-  if (resolved && typeof resolved === 'object') {
-    const policy = normalizeOptionalString(resolved.policy)
-
-    if (policy === 'fingerprint') {
-      throw new Error('Unable to resolve Expo runtimeVersion policy "fingerprint" from export metadata. Pass --runtime-version if your Expo export omits metadata.json.')
-    }
-
-    if (policy) {
-      return resolveExpoRuntimeVersionPolicy(config, platform, policy)
-    }
-  }
-
-  if (fallbackRuntimeVersion?.trim()) {
-    return fallbackRuntimeVersion.trim()
-  }
-
-  throw new Error('Expo runtimeVersion is required. Pass --runtime-version or set runtimeVersion in Expo config.')
-}
-
-function extractIosPlistString(contents: string, key: string) {
-  const match = contents.match(new RegExp(`<key>\\s*${key}\\s*<\\/key>\\s*<string>\\s*([^<]+?)\\s*<\\/string>`, 's'))
-  return match?.[1]?.trim()
-}
-
-function extractXcodeBuildSettingReference(value: string) {
-  const match = value.trim().match(/^\$\(([^):]+)(?::[^)]+)?\)$|^\$\{([^}:]+)(?::[^}]+)?\}$/)
-  return match?.[1] ?? match?.[2]
-}
-
-function extractXcodeBuildSettingValue(contents: string, key: string) {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matches = [
-    ...contents.matchAll(new RegExp(`\\b${escapedKey}\\s*=\\s*([^;\\n]+)\\s*;`, 'g')),
-    ...contents.matchAll(new RegExp(`^\\s*${escapedKey}\\s*=\\s*(.+?)\\s*$`, 'gm')),
-  ]
-  const value = matches.at(-1)?.[1]?.trim()
-
-  if (!value) {
-    return undefined
-  }
-
-  return value
-    .replace(/;\s*$/, '')
-    .replace(/^["']|["']$/g, '')
-    .trim()
-}
-
-async function resolveIosBuildSetting(cwd: string, key: string, seen = new Set<string>()): Promise<string | undefined> {
-  if (seen.has(key)) {
-    return undefined
-  }
-
-  const nextSeen = new Set(seen)
-  nextSeen.add(key)
-  const candidates = [
-    path.join(cwd, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj'),
-    path.join(cwd, 'ios', 'App.xcodeproj', 'project.pbxproj'),
-  ]
-
-  for (const candidate of candidates) {
-    const contents = await readTextFileIfExists(candidate)
-
-    if (!contents) {
-      continue
-    }
-
-    const value = extractXcodeBuildSettingValue(contents, key)
-
-    if (!value) {
-      continue
-    }
-
-    const nestedReference = extractXcodeBuildSettingReference(value)
-
-    if (!nestedReference) {
-      return value
-    }
-
-    const resolvedNestedValue: string | undefined = await resolveIosBuildSetting(cwd, nestedReference, nextSeen)
-
-    if (resolvedNestedValue) {
-      return resolvedNestedValue
-    }
-  }
-
-  return undefined
-}
-
-async function resolveIosVersionValue(cwd: string, value: string) {
-  const buildSettingReference = extractXcodeBuildSettingReference(value)
-
-  if (!buildSettingReference) {
-    return value
-  }
-
-  const resolvedValue = await resolveIosBuildSetting(cwd, buildSettingReference)
-
-  if (resolvedValue) {
-    return resolvedValue
-  }
-
-  throw new Error(`Unable to resolve iOS runtime version placeholder "${value}". Pass --runtime-version or ensure ${buildSettingReference} is defined in the Xcode project.`)
-}
-
-async function resolveIosRuntimeVersion(cwd: string, runtimeVersion?: string) {
-  if (runtimeVersion) {
-    return runtimeVersion
-  }
-
-  const candidates = [
-    path.join(cwd, 'ios', 'App', 'App', 'Info.plist'),
-    path.join(cwd, 'ios', 'App', 'Info.plist'),
-  ]
-
-  for (const candidate of candidates) {
-    const contents = await readTextFileIfExists(candidate)
-
-    if (!contents) {
-      continue
-    }
-
-    const version = extractIosPlistString(contents, 'CFBundleShortVersionString')
-
-    if (version) {
-      return resolveIosVersionValue(cwd, version)
-    }
-  }
-
-  throw new Error('Unable to resolve iOS runtime version. Pass --runtime-version or ensure Info.plist defines CFBundleShortVersionString.')
-}
-
-async function resolveAndroidRuntimeVersion(cwd: string, runtimeVersion?: string) {
-  if (runtimeVersion) {
-    return runtimeVersion
-  }
-
-  const candidates = [
-    path.join(cwd, 'android', 'app', 'build.gradle'),
-    path.join(cwd, 'android', 'app', 'build.gradle.kts'),
-  ]
-
-  for (const candidate of candidates) {
-    const contents = await readTextFileIfExists(candidate)
-
-    if (!contents) {
-      continue
-    }
-
-    const match = contents.match(/versionName\s*(?:=)?\s*["']([^"']+)["']/)
-
-    if (match?.[1]) {
-      return match[1].trim()
-    }
-  }
-
-  throw new Error('Unable to resolve Android runtime version. Pass --runtime-version or ensure build.gradle defines versionName as a string literal.')
-}
-
-async function resolveCapacitorRuntimeVersion(
-  cwd: string,
-  platform: MobilePlatform,
-  runtimeVersion?: string,
-) {
-  if (platform === 'ios') {
-    return resolveIosRuntimeVersion(cwd, runtimeVersion)
-  }
-
-  return resolveAndroidRuntimeVersion(cwd, runtimeVersion)
-}
-
-export async function resolveProjectRuntimeVersion(
-  cwd: string,
-  platform: MobilePlatform,
-  runtimeVersion?: string,
-) {
-  if (runtimeVersion) {
-    return runtimeVersion
-  }
-
-  const runtimeResolver = platform === 'ios'
-    ? resolveIosRuntimeVersion
-    : resolveAndroidRuntimeVersion
-  const nativeRuntimeVersion = await runtimeResolver(cwd).catch(() => null)
-
-  if (nativeRuntimeVersion) {
-    return nativeRuntimeVersion
-  }
-
-  const expoConfig = await readExpoConfig(cwd).catch(() => null)
-
-  if (expoConfig) {
-    const expoRuntimeVersion = resolveExpoRuntimeVersion(
-      expoConfig,
-      platform,
-      undefined,
-      undefined,
-      resolveExpoConfiguredVersion(expoConfig, platform),
-    )
-
-    if (expoRuntimeVersion) {
-      return expoRuntimeVersion
-    }
-  }
-
-  throw new Error(`Unable to resolve ${platform} runtime version. Pass --runtime-version to override.`)
-}
-
-function resolveBundleId(input: {
-  bundleId?: string
-  bundleFromPackage?: boolean
-  explicitBundleIdSource?: Extract<BundleIdSource, 'flag' | 'prompt'>
-  packageVersion?: string
-  runtimeVersion: string
-  hash: string
-}) {
-  if (input.bundleId) {
-    return {
-      bundleId: normalizeBundleId(input.bundleId),
-      bundleIdSource: input.explicitBundleIdSource ?? 'flag',
-    }
-  }
-
-  if (input.bundleFromPackage) {
-    if (!input.packageVersion) {
-      throw new Error('`--bundle-from-package` requires a package.json version.')
-    }
-
-    return {
-      bundleId: normalizeBundleId(input.packageVersion),
-      bundleIdSource: 'package-json' as const,
-    }
-  }
-
-  return {
-    bundleId: createAutoBundleId(input.runtimeVersion, input.hash),
-    bundleIdSource: 'runtime-version' as const,
-  }
-}
-
-async function buildExpoAssetManifest(exportDir: string) {
-  const entries = await collectDirectoryEntries(exportDir)
-  const assetPaths = Object.keys(entries)
-    .filter(relativePath => !relativePath.endsWith('.map'))
-    .filter(relativePath => !relativePath.endsWith('metadata.json'))
-    .filter(relativePath => !relativePath.endsWith('assetmap.json'))
-    .sort()
-
-  const launchAsset = assetPaths.find(relativePath => relativePath.endsWith('.js') || relativePath.endsWith('.hbc'))
-
-  if (!launchAsset) {
-    throw new Error('Unable to find Expo launch asset in export output.')
-  }
-
-  return {
-    launchAsset,
-    assets: assetPaths.filter(relativePath => relativePath !== launchAsset),
-  }
-}
-
-async function createExpoExportDirectory(cwd: string) {
-  const otalanDir = path.join(cwd, '.otalan')
-
-  await mkdir(otalanDir, { recursive: true })
-
-  return mkdtemp(path.join(otalanDir, 'expo-export-'))
-}
-
-// -----------------------------------------------------------------------------
-// Test helpers
-// -----------------------------------------------------------------------------
-
-export const bundleTestUtils = {
-  normalizeBundleId,
-  createBundleArchiveFileName,
-  createAutoBundleId,
-  resolveBundleId,
-  resolveExpoRuntimeVersion,
-  findRuntimeVersionInObject,
-  collectDirectoryEntries,
-  createExpoExportDirectory,
-  findNativeBundleEntries,
-  formatOmittedSourceMapCount,
-  zipDirectory,
-}
-
-// -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
 
 export async function bundleProject(options: BundleOptions): Promise<BundleResult> {
   if (options.target === 'capacitor') {
@@ -837,10 +194,11 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       'bunx',
       ['expo', 'export', '--platform', options.platform, '--output-dir', exportDir],
       options.cwd,
+      { verbose: options.verbose },
     )
 
     const exportedRuntimeVersion = await readExpoExportRuntimeVersion(exportDir, options.platform)
-    const expoConfig = await readExpoConfig(options.cwd)
+    const expoConfig = await readExpoConfig(options.cwd, { verbose: options.verbose })
     const runtimeVersion = resolveExpoRuntimeVersion(
       expoConfig,
       options.platform,
@@ -860,7 +218,6 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
       runtimeVersion,
       hash,
     })
-
     const manifest: ExpoBundleManifest = {
       target: 'expo',
       hash,
@@ -886,4 +243,18 @@ async function bundleExpoProject(options: BundleOptions): Promise<BundleResult> 
   } finally {
     await rm(exportDir, { recursive: true, force: true })
   }
+}
+
+export const bundleTestUtils = {
+  collectDirectoryEntries,
+  createAutoBundleId,
+  createBundleArchiveFileName,
+  createExpoExportDirectory,
+  findNativeBundleEntries,
+  findRuntimeVersionInObject,
+  formatOmittedSourceMapCount,
+  normalizeBundleId,
+  resolveBundleId,
+  resolveExpoRuntimeVersion,
+  zipDirectory,
 }

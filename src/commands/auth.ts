@@ -1,4 +1,5 @@
 import {
+  DEFAULT_API_URL,
   loadGlobalConfig,
   saveGlobalConfig,
   saveProjectConfig,
@@ -11,12 +12,10 @@ import {
   resolveApiKeysUrl,
   type CommandContext,
 } from '../cli/helpers'
+import { formatKeyValueTable } from '../cli/table'
 import { getReleaseContext, listReleaseApps, type ReleaseAppItem } from '../http'
 import { promptSelectWithHint, promptWithHint, type PromptWithHintInput } from '../cli/prompts'
-
-// -----------------------------------------------------------------------------
-// Login helpers
-// -----------------------------------------------------------------------------
+import { printSuccess } from '../cli/ui'
 
 type TextPrompt = (input: PromptWithHintInput) => Promise<string>
 type GlobalConfigLoader = () => Promise<GlobalConfig>
@@ -41,7 +40,7 @@ async function resolveLoginInput(
   const stored = await loadConfig().catch(() => null)
   const explicitApiUrl = readStringOption(options, 'api-url')
   const explicitApiKey = readStringOption(options, 'api-key')
-  const fallbackApiUrl = stored?.apiUrl ?? 'https://api.otalan.com'
+  const fallbackApiUrl = stored?.apiUrl ?? DEFAULT_API_URL
 
   if (explicitApiKey) {
     return {
@@ -53,7 +52,7 @@ async function resolveLoginInput(
   const apiUrl = explicitApiUrl ?? await prompt({
     question: 'Otalan API URL',
     fallback: fallbackApiUrl,
-    hint: 'API base URL. Press Enter to keep the current value.',
+    hint: `API base URL. Otalan default: ${DEFAULT_API_URL}.`,
   })
 
   const apiKeysUrl = resolveApiKeysUrl(apiUrl)
@@ -67,7 +66,6 @@ async function resolveLoginInput(
     hint: [
       'Project OTA Publish Key for publish, rollback, status, and bundle listing. Do not use an OTA App Key.',
       stored?.apiKey ? `Current OTA Publish Key: ${maskApiKey(stored.apiKey)}` : undefined,
-      stored?.apiKey ? 'Press Enter to keep the current OTA Publish Key.' : undefined,
     ].filter(Boolean).join('\n'),
     example: stored?.apiKey ? undefined : 'otalan_ci_xxxxxxxxx',
   })
@@ -140,10 +138,6 @@ async function validateAndSaveLogin(input: {
   return context
 }
 
-// -----------------------------------------------------------------------------
-// Commands
-// -----------------------------------------------------------------------------
-
 export async function handleLogin(options: Record<string, string | boolean>) {
   const { apiKey, apiUrl } = await resolveLoginInput(options)
   const context = await validateAndSaveLogin({
@@ -152,10 +146,13 @@ export async function handleLogin(options: Record<string, string | boolean>) {
   })
 
   console.log('')
-  console.log(`Resolved OTA Publish Key context: ${context.organizationSlug} / ${context.projectSlug}`)
+  console.log(formatKeyValueTable([
+    ['Organization', context.organizationSlug],
+    ['Project', context.projectSlug],
+  ]))
 
   console.log('')
-  console.log('Saved CLI auth.')
+  printSuccess('Saved CLI auth')
 }
 
 export async function handleDoctor(options: Record<string, string | boolean>) {
@@ -165,10 +162,12 @@ export async function handleDoctor(options: Record<string, string | boolean>) {
     apiKey: api.apiKey,
   })
 
-  console.log('Otalan API connection OK.')
-  console.log(`API URL: ${api.apiUrl}`)
-  console.log(`Organization: ${context.organizationSlug}`)
-  console.log(`Project: ${context.projectSlug}`)
+  printSuccess('Otalan API connection OK')
+  console.log(formatKeyValueTable([
+    ['API URL', api.apiUrl],
+    ['Organization', context.organizationSlug],
+    ['Project', context.projectSlug],
+  ]))
 }
 
 export async function handleInit(context: CommandContext, options: Record<string, string | boolean>) {
@@ -194,10 +193,13 @@ export async function handleInit(context: CommandContext, options: Record<string
   } satisfies ProjectConfig)
 
   console.log('')
-  console.log(`Resolved OTA Publish Key context: ${releaseContext.organizationSlug} / ${releaseContext.projectSlug}`)
-  console.log(`Linked app: ${app ? formatAppOption(app) : appId}`)
+  console.log(formatKeyValueTable([
+    ['Organization', releaseContext.organizationSlug],
+    ['Project', releaseContext.projectSlug],
+    ['Linked app', app ? formatAppOption(app) : appId],
+  ]))
 
-  console.log('Created otalan.config.json.')
+  printSuccess('Created otalan.config.json')
 }
 
 export const authCommandTestUtils = {
