@@ -15,9 +15,11 @@ import {
 } from '../http'
 import {
   resolveChannelsAppId,
+  formatReleasePaginationSummary,
   resolveReleaseAccess,
   resolveReleaseProjectAccess,
   resolveRemoteReleaseTuple,
+  resolveReleasePaginationOptions,
   resolveRollbackTargetBundleId,
   type ChannelsListDependencies,
 } from './release-shared'
@@ -32,20 +34,32 @@ export async function handleRollback(
     options,
     'Release channel for this rollback.',
   )
-  const releases = await listReleases({
+  const explicitTargetBundleId = readStringOption(options, 'bundle-id')
+    ?? readStringOption(options, 'target-bundle-id')
+  const releasePage = await listReleases({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
     platform,
     channel,
     runtimeVersion,
+    ...(explicitTargetBundleId
+      ? { bundleId: explicitTargetBundleId }
+      : resolveReleasePaginationOptions(options)),
   })
-  const explicitTargetBundleId = readStringOption(options, 'bundle-id')
-    ?? readStringOption(options, 'target-bundle-id')
+  const releases = releasePage.items
 
   if (releases.length === 0 && !explicitTargetBundleId) {
-    console.log(formatInfo('No bundles found for the selected platform, channel, and runtimeVersion.'))
+    console.log(formatInfo(
+      releasePage.pagination.totalItems === 0
+        ? 'No bundles found for the selected platform, channel, and runtimeVersion.'
+        : `No bundles found on page ${releasePage.pagination.page} for the selected platform, channel, and runtimeVersion.`,
+    ))
     return
+  }
+
+  if (!explicitTargetBundleId) {
+    console.log(formatReleasePaginationSummary(releasePage.pagination))
   }
 
   const targetBundleId = await resolveRollbackTargetBundleId({
@@ -139,6 +153,29 @@ export async function handleResume(
   await handleRolloutStateChange(context, options, 'resume')
 }
 
+async function loadActiveRelease(input: Parameters<typeof listReleases>[0]) {
+  let page = 1
+
+  while (true) {
+    const releasePage = await listReleases({
+      ...input,
+      page,
+      pageSize: 100,
+    })
+    const active = releasePage.items.find(item => item.isActive)
+
+    if (active) {
+      return active
+    }
+
+    if (!releasePage.pagination.hasNextPage) {
+      return null
+    }
+
+    page += 1
+  }
+}
+
 export async function handleStatus(
   context: CommandContext,
   options: Record<string, string | boolean>,
@@ -149,7 +186,7 @@ export async function handleStatus(
     options,
     'Release channel.',
   )
-  const releases = await listReleases({
+  const active = await loadActiveRelease({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
@@ -157,7 +194,6 @@ export async function handleStatus(
     channel,
     runtimeVersion,
   })
-  const active = releases.find(item => item.isActive) ?? null
 
   if (!active) {
     console.log(formatInfo('No active bundle found for the selected platform, channel, and runtimeVersion.'))
@@ -209,14 +245,16 @@ export async function handleBundlesList(
     options,
     'Release channel.',
   )
-  const releases = await listReleases({
+  const releasePage = await listReleases({
     apiUrl: api.apiUrl,
     apiKey: api.apiKey,
     appId: project.appId,
     platform,
     channel,
     runtimeVersion,
+    ...resolveReleasePaginationOptions(options),
   })
 
-  printBundlesTable(releases)
+  printBundlesTable(releasePage.items)
+  console.log(formatReleasePaginationSummary(releasePage.pagination))
 }

@@ -8,6 +8,7 @@ import {
 } from '../../src/commands/release'
 import {
   createProjectFixture,
+  createReleasePagination,
   createRelease,
   createReleaseContextResponse,
 } from './release.fixtures'
@@ -132,6 +133,24 @@ describe('releaseTestUtils.resolveRollbackTargetBundleId', () => {
   })
 })
 
+describe('releaseTestUtils.resolveReleasePaginationOptions', () => {
+  test('reads optional release page and page size options', () => {
+    expect(releaseTestUtils.resolveReleasePaginationOptions({
+      page: '2',
+      'page-size': '50',
+    })).toEqual({
+      page: 2,
+      pageSize: 50,
+    })
+  })
+
+  test('rejects invalid release page sizes before calling the API', () => {
+    expect(() => releaseTestUtils.resolveReleasePaginationOptions({
+      'page-size': '101',
+    })).toThrow('page-size must be an integer between 1 and 100.')
+  })
+})
+
 describe('handleRollback', () => {
   test('exits without prompting when no bundles are available', async () => {
     const cwd = await createProjectFixture()
@@ -153,6 +172,9 @@ describe('handleRollback', () => {
       if (url.pathname === '/v1/releases') {
         return new Response(JSON.stringify({
           items: [],
+          pagination: createReleasePagination({
+            totalItems: 0,
+          }),
         }), {
           status: 200,
           headers: {
@@ -200,8 +222,11 @@ describe('handleRollback', () => {
       }
 
       if (url.pathname === '/v1/releases') {
+        expect(url.searchParams.get('bundleId')).toBe('1.0.0-web.1')
+
         return new Response(JSON.stringify({
           items: [createRelease()],
+          pagination: createReleasePagination(),
         }), {
           status: 200,
           headers: {
@@ -304,6 +329,8 @@ describe('release command context output', () => {
         expect(url.searchParams.get('platform')).toBe('ios')
         expect(url.searchParams.get('channel')).toBe('production')
         expect(url.searchParams.get('runtimeVersion')).toBe('1.0.0')
+        expect(url.searchParams.get('page')).toBe('1')
+        expect(url.searchParams.get('pageSize')).toBe('100')
 
         return new Response(JSON.stringify({
           items: [createRelease({
@@ -312,6 +339,7 @@ describe('release command context output', () => {
             rolloutState: 'active',
             resolvedDownloadUrl: 'https://cdn.example.com/bundle.zip',
           })],
+          pagination: createReleasePagination(),
         }), {
           status: 200,
           headers: {
@@ -370,6 +398,8 @@ describe('handleBundlesList', () => {
         expect(url.searchParams.get('platform')).toBe('ios')
         expect(url.searchParams.get('channel')).toBe('production')
         expect(url.searchParams.get('runtimeVersion')).toBe('1.0.0')
+        expect(url.searchParams.get('page')).toBe('2')
+        expect(url.searchParams.get('pageSize')).toBe('50')
 
         return new Response(JSON.stringify({
           items: [createRelease({
@@ -378,6 +408,13 @@ describe('handleBundlesList', () => {
             rolloutState: 'active',
             resolvedDownloadUrl: 'https://cdn.example.com/bundle.zip',
           })],
+          pagination: createReleasePagination({
+            page: 2,
+            pageSize: 50,
+            totalItems: 51,
+            totalPages: 2,
+            hasPreviousPage: true,
+          }),
         }), {
           status: 200,
           headers: {
@@ -394,11 +431,13 @@ describe('handleBundlesList', () => {
       platform: 'ios',
       channel: 'production',
       'runtime-version': '1.0.0',
+      page: '2',
+      'page-size': '50',
     })
 
     expect(requestedPaths).toEqual([
       '/v1/releases/context',
-      '/v1/releases?appId=com.example.app&platform=ios&channel=production&runtimeVersion=1.0.0',
+      '/v1/releases?appId=com.example.app&platform=ios&channel=production&runtimeVersion=1.0.0&page=2&pageSize=50',
     ])
     const joinedOutput = stripAnsiLines(output).join('\n')
 
@@ -406,5 +445,6 @@ describe('handleBundlesList', () => {
     expect(joinedOutput).toContain('bundleId')
     expect(joinedOutput).toContain('1.0.0-web.2')
     expect(joinedOutput).toContain('active')
+    expect(joinedOutput).toContain('i Page 2 of 2 (51-51 of 51). Use --page 1 for the previous page.')
   })
 })

@@ -54,6 +54,14 @@ describe('release request errors', () => {
 
       return new Response(JSON.stringify({
         items: [],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          totalItems: 0,
+          totalPages: 1,
+          hasPreviousPage: false,
+          hasNextPage: false,
+        },
       }), {
         status: 200,
         headers: {
@@ -67,6 +75,16 @@ describe('release request errors', () => {
       apiKey: 'test-key',
       appId: 'com.example.app',
       channel: '',
-    })).resolves.toEqual([])
+    })).resolves.toEqual({
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        totalItems: 0,
+        totalPages: 1,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+    })
   })
 })

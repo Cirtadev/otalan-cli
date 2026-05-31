@@ -9,10 +9,10 @@ import {
   resolveProject,
   type CommandContext,
 } from '../cli/helpers'
-import { formatProjectConfigSummary } from '../cli/output'
+import { formatProjectConfigSummary, printBundlesTable } from '../cli/output'
 import { promptWithHint, type PromptWithHintInput } from '../cli/prompts'
 import { formatKeyValueTable } from '../cli/table'
-import { printWarning } from '../cli/ui'
+import { formatHeading, printWarning } from '../cli/ui'
 import type { MobilePlatform, Target } from '../config'
 import { listReleases, type ReleaseItem } from '../http'
 
@@ -32,6 +32,7 @@ type PublishedBundleHint = {
   channel: string
   bundleId?: string
   checked: boolean
+  releases?: ReleaseItem[]
 }
 
 type ExistingPublishedBundleCheck = {
@@ -174,6 +175,8 @@ export async function resolveBundleIdInput(input: {
     input.manifest,
     input.platform,
   )
+  printPublishedBundlesTable(input.publishedBundle)
+
   const hintLines = [
     currentBundleId
       ? `Local bundle ID: ${currentBundleId}`
@@ -213,6 +216,16 @@ export function formatPublishedBundleHint(publishedBundle?: PublishedBundleHint)
   return `Published bundle ID (${publishedBundle.channel}): ${publishedBundle.bundleId}`
 }
 
+export function printPublishedBundlesTable(publishedBundle?: PublishedBundleHint) {
+  if (!publishedBundle?.checked || !publishedBundle.releases) {
+    return
+  }
+
+  console.log('')
+  console.log(formatHeading(`Published bundles (${publishedBundle.channel})`))
+  printBundlesTable(publishedBundle.releases)
+}
+
 export function resolvePublishedBundleIdFromReleases(releases: ReleaseItem[]) {
   const activeRelease = releases.find(item => item.isActive)
 
@@ -246,6 +259,11 @@ export async function resolvePublishedBundleHint(input: {
   options: Record<string, string | boolean>
   platform: MobilePlatform
   runtimeVersion?: string
+  loadReleases?: (input: {
+    channel: string
+    platform: MobilePlatform
+    runtimeVersion: string
+  }) => Promise<ReleaseItem[]>
   loadPublishedBundleId?: (input: {
     channel: string
     platform: MobilePlatform
@@ -259,6 +277,21 @@ export async function resolvePublishedBundleHint(input: {
   const channel = readStringOption(input.options, 'channel') ?? 'production'
 
   try {
+    if (input.loadReleases) {
+      const releases = await input.loadReleases({
+        channel,
+        platform: input.platform,
+        runtimeVersion: input.runtimeVersion,
+      })
+
+      return {
+        channel,
+        bundleId: resolvePublishedBundleIdFromReleases(releases),
+        checked: true,
+        releases,
+      }
+    }
+
     if (input.loadPublishedBundleId) {
       return {
         channel,
@@ -281,7 +314,7 @@ export async function resolvePublishedBundleHint(input: {
       projectSlug: project.projectSlug,
     })
 
-    const releases = await listReleases({
+    const releasePage = await listReleases({
       apiUrl: api.apiUrl,
       apiKey: api.apiKey,
       appId: project.appId,
@@ -289,11 +322,13 @@ export async function resolvePublishedBundleHint(input: {
       channel,
       runtimeVersion: input.runtimeVersion,
     })
+    const releases = releasePage.items
 
     return {
       channel,
       bundleId: resolvePublishedBundleIdFromReleases(releases),
       checked: true,
+      releases,
     }
   } catch {
     return {
@@ -342,7 +377,7 @@ export async function resolveExistingPublishedBundleCheck(input: {
       projectSlug: project.projectSlug,
     })
 
-    const releases = await listReleases({
+    const releasePage = await listReleases({
       apiUrl: api.apiUrl,
       apiKey: api.apiKey,
       appId: project.appId,
@@ -351,6 +386,7 @@ export async function resolveExistingPublishedBundleCheck(input: {
       runtimeVersion: input.runtimeVersion,
       bundleId: input.bundleId,
     })
+    const releases = releasePage.items
 
     return {
       channel,

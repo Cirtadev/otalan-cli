@@ -20,11 +20,12 @@ import {
   formatReleaseContextSummary,
 } from '../cli/output'
 import { promptSelectWithHint, promptWithHint, type PromptSelectWithHintInput } from '../cli/prompts'
-import { colorize, formatSuccess } from '../cli/ui'
+import { colorize, formatInfo, formatSuccess } from '../cli/ui'
 import type { MobilePlatform } from '../config'
 import {
   type BundleIngestItem,
   type ReleaseItem,
+  type ReleasePaginationMeta,
   type ReleaseAppItem,
   listReleaseApps,
 } from '../http'
@@ -37,6 +38,7 @@ export const PLATFORM_OPTIONS = [
 const INGEST_POLL_INTERVAL_MS = 2_000
 const INGEST_WAIT_TIMEOUT_MS = 10 * 60_000
 const ALL_CHANNEL_APPS_OPTION = '__all__'
+const MAX_RELEASE_PAGE_SIZE = 100
 
 type ChannelAppSelector = (input: {
   question: string
@@ -193,6 +195,63 @@ export function resolveRolloutPercent(options: Record<string, string | boolean>)
 
 export function isVerboseOutput(options: Record<string, string | boolean>) {
   return readBooleanOption(options, 'verbose', false, ['v'])
+}
+
+function readIntegerOption(
+  options: Record<string, string | boolean>,
+  key: string,
+) {
+  const value = readStringOption(options, key)
+
+  if (value === undefined) {
+    return undefined
+  }
+
+  const numberValue = Number(value)
+
+  if (!Number.isInteger(numberValue)) {
+    return Number.NaN
+  }
+
+  return numberValue
+}
+
+export function resolveReleasePaginationOptions(options: Record<string, string | boolean>) {
+  const page = readIntegerOption(options, 'page')
+  const pageSize = readIntegerOption(options, 'page-size')
+
+  if (page !== undefined && (!Number.isInteger(page) || page < 1)) {
+    throw new Error('page must be an integer greater than or equal to 1.')
+  }
+
+  if (
+    pageSize !== undefined
+    && (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_RELEASE_PAGE_SIZE)
+  ) {
+    throw new Error(`page-size must be an integer between 1 and ${MAX_RELEASE_PAGE_SIZE}.`)
+  }
+
+  return {
+    page,
+    pageSize,
+  }
+}
+
+export function formatReleasePaginationSummary(pagination: ReleasePaginationMeta) {
+  const startItem = pagination.totalItems === 0
+    ? 0
+    : ((pagination.page - 1) * pagination.pageSize) + 1
+  const endItem = Math.min(pagination.totalItems, pagination.page * pagination.pageSize)
+  const pageAction = pagination.hasNextPage
+    ? `Use --page ${pagination.page + 1} for the next page.`
+    : pagination.hasPreviousPage
+      ? `Use --page ${pagination.page - 1} for the previous page.`
+      : undefined
+
+  return formatInfo([
+    `Page ${pagination.page} of ${pagination.totalPages} (${startItem}-${endItem} of ${pagination.totalItems}).`,
+    pageAction,
+  ].filter(Boolean).join(' '))
 }
 
 export function formatPublishSuccessMessage() {

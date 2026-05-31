@@ -8,6 +8,7 @@ import {
   getReleaseIngest,
   listReleaseApps,
   listReleaseChannels,
+  listReleases,
   uploadReleaseArchive,
 } from '../src/http'
 
@@ -268,6 +269,77 @@ describe('listReleaseChannels', () => {
       apiKey: 'test-key',
       appId: 'com.example.app',
     })).resolves.toEqual([])
+  })
+})
+
+describe('listReleases', () => {
+  test('lists releases with offset pagination query params and metadata', async () => {
+    globalThis.fetch = (async (input, init) => {
+      expect(String(input)).toBe(
+        'https://api.otalan.com/v1/releases?appId=com.example.app&platform=ios&channel=production&runtimeVersion=1.0.0&page=2&pageSize=50',
+      )
+      expect(init?.method).toBe('GET')
+      expect(init?.headers).toEqual({
+        'x-api-key': 'test-key',
+      })
+
+      return new Response(JSON.stringify({
+        items: [{
+          id: 'release-123',
+          projectId: 'project-123',
+          appId: 'com.example.app',
+          platform: 'ios',
+          channel: 'production',
+          runtimeVersion: '1.0.0',
+          bundleId: '1.0.0-web.2',
+          releaseStorageId: 'release-storage-123',
+          checksum: 'abc123',
+          mandatory: true,
+          rolloutPercent: 100,
+          rolloutState: 'complete',
+          releaseNotes: null,
+          fileSizeBytes: 1234,
+          storageObjectExists: true,
+          isActive: false,
+          publishedAt: '2026-04-21T00:00:00.000Z',
+          resolvedDownloadUrl: 'https://cdn.example.com/ios.zip',
+        }],
+        pagination: {
+          page: 2,
+          pageSize: 50,
+          totalItems: 51,
+          totalPages: 2,
+          hasPreviousPage: true,
+          hasNextPage: false,
+        },
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    }) as typeof fetch
+
+    const page = await listReleases({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      appId: 'com.example.app',
+      platform: 'ios',
+      channel: 'production',
+      runtimeVersion: '1.0.0',
+      page: 2,
+      pageSize: 50,
+    })
+
+    expect(page.pagination).toEqual({
+      page: 2,
+      pageSize: 50,
+      totalItems: 51,
+      totalPages: 2,
+      hasPreviousPage: true,
+      hasNextPage: false,
+    })
+    expect(page.items[0]?.bundleId).toBe('1.0.0-web.2')
   })
 })
 

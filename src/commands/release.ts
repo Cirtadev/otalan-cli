@@ -10,6 +10,7 @@ import { handlePublish } from './release-publish'
 import {
   isTerminalIngestStatus,
   resolveChannelsAppId,
+  resolveReleasePaginationOptions,
   resolveRollbackTargetBundleId,
   resolveRolloutPercent,
   waitForReleaseIngest,
@@ -27,6 +28,7 @@ export {
 
 export const releaseTestUtils = {
   resolveChannelsAppId,
+  resolveReleasePaginationOptions,
   isTerminalIngestStatus,
   resolveRollbackTargetBundleId,
   resolveRolloutPercent,

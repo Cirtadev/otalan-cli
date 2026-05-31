@@ -59,6 +59,25 @@ export function createRelease(overrides: Partial<ReleaseItem> = {}): ReleaseItem
   }
 }
 
+export function createReleasePagination(overrides: Partial<{
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}> = {}) {
+  return {
+    page: 1,
+    pageSize: 20,
+    totalItems: 1,
+    totalPages: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+    ...overrides,
+  }
+}
+
 export async function createProjectFixture() {
   const cwd = path.join(os.tmpdir(), `otalan-cli-release-${crypto.randomUUID()}`)
 

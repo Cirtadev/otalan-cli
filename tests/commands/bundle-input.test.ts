@@ -134,6 +134,69 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
     ])
   })
 
+  test('prints published bundles before prompting for a bundle ID', async () => {
+    const output: string[] = []
+    const prompts: Array<{ hint: string, example?: string }> = []
+
+    console.log = (...values: unknown[]) => {
+      output.push(values.map(String).join(' '))
+    }
+
+    const input = await bundleCommandTestUtils.resolveBundleIdInput({
+      options: {},
+      platform: 'ios',
+      runtimeVersion: '1.2.3',
+      manifest: MANIFEST,
+      publishedBundle: {
+        channel: 'production',
+        bundleId: '1.2.3-web.2',
+        checked: true,
+        releases: [
+          createRelease({
+            bundleId: '1.2.3-web.2',
+            isActive: true,
+            publishedAt: '2026-05-05T00:00:00.000Z',
+          }),
+          createRelease({
+            bundleId: '1.2.3-web.1',
+          }),
+        ],
+      },
+      isInteractive: true,
+      prompt: async promptInput => {
+        prompts.push({
+          hint: promptInput.hint,
+          example: promptInput.example,
+        })
+        return ''
+      },
+    })
+
+    expect(input).toEqual({
+      bundleId: undefined,
+      bundleIdSource: undefined,
+    })
+    const cleanOutput = stripAnsiLines(output)
+    const joinedOutput = cleanOutput.join('\n')
+
+    expect(cleanOutput[0]).toBe('')
+    expect(cleanOutput.at(-1)).not.toBe('')
+    expect(joinedOutput).toContain('Published bundles (production)')
+    expect(joinedOutput).toContain('bundleId')
+    expect(joinedOutput).toContain('1.2.3-web.2')
+    expect(joinedOutput).toContain('1.2.3-web.1')
+    expect(prompts).toEqual([
+      {
+        example: undefined,
+        hint: [
+          'Local bundle ID: 1.2.3-web.4',
+          'Published bundle ID (production): 1.2.3-web.2',
+          'Type the bundle ID to release, or press Enter to generate one from runtimeVersion and the bundle hash.',
+        ].join('\n'),
+      },
+    ])
+  })
+
   test('keeps auto-generated bundle IDs when the prompt is left empty', async () => {
     const input = await bundleCommandTestUtils.resolveBundleIdInput({
       options: {},
@@ -209,6 +272,44 @@ describe('bundleCommandTestUtils.resolveBundleIdInput', () => {
 })
 
 describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
+  test('returns the releases loaded for the bundle prompt table', async () => {
+    const releases = [
+      createRelease({
+        bundleId: '2.0.0-web.1',
+      }),
+      createRelease({
+        bundleId: '2.0.0-web.2',
+        isActive: true,
+      }),
+    ]
+    const hint = await bundleCommandTestUtils.resolvePublishedBundleHint({
+      context: {
+        cwd: '/tmp/project',
+      },
+      options: {
+        channel: 'staging',
+      },
+      platform: 'android',
+      runtimeVersion: '2.0.0',
+      loadReleases: async input => {
+        expect(input).toEqual({
+          channel: 'staging',
+          platform: 'android',
+          runtimeVersion: '2.0.0',
+        })
+
+        return releases
+      },
+    })
+
+    expect(hint).toEqual({
+      channel: 'staging',
+      bundleId: '2.0.0-web.2',
+      checked: true,
+      releases,
+    })
+  })
+
   test('returns the published bundle ID loaded for the selected tuple', async () => {
     const hint = await bundleCommandTestUtils.resolvePublishedBundleHint({
       context: {

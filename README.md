@@ -403,7 +403,7 @@ otalan bundle --target expo --platform ios --bundle-id 1.0.5
 If you omit `bundleId`:
 
 - in an interactive terminal, the CLI prompts for a bundle ID and shows the local bundle ID from `.otalan/bundle/manifest.json` when available
-- when `otalan login` and `otalan init` are configured, the prompt also shows the active published bundle ID for the selected platform/runtime version/channel
+- when `otalan login` and `otalan init` are configured, the prompt prints the latest 20 published bundles for the selected platform/runtime version/channel and also shows the active or latest published bundle ID
 - published bundle hints use `--channel`, defaulting to `production`
 - duplicate published bundle ID checks use the same `--channel` value and default to `production`
 - pressing Enter without a bundle ID keeps the automatic bundle ID behavior
@@ -505,6 +505,8 @@ Remote bundle tables are colorized and display the API `publishedAt` timestamp, 
 
 The active bundle row is highlighted in green.
 
+Bundle lists are paginated by the API. When `--page` and `--page-size` are omitted, Otalan returns page 1 with 20 bundles. `--page-size` is capped at 100.
+
 Default resolution order:
 
 1. `--runtime-version`
@@ -514,6 +516,7 @@ Default resolution order:
 
 ```bash
 otalan bundles --platform ios --channel production
+otalan bundles --platform ios --channel production --page 2 --page-size 50
 ```
 
 ### `otalan rollback`
@@ -521,10 +524,11 @@ otalan bundles --platform ios --channel production
 Reactivates an older bundle for the same tuple.
 
 `rollback` uses the same runtime-version default order as `bundles`. Pass `--runtime-version` if you want to override the detected default.
-If `--bundle-id` is omitted, interactive terminals show a selectable bundle list. The current live bundle is highlighted in green and disabled; deleted or unavailable archives are also disabled.
+If `--bundle-id` is omitted, interactive terminals show a paginated selectable bundle list. The current live bundle is highlighted in green and disabled; deleted or unavailable archives are also disabled. Use `--page` and `--page-size` to choose which rollback candidates to display.
 
 ```bash
 otalan rollback --bundle-id 1.0.0-web.1 --platform ios --channel production
+otalan rollback --platform ios --channel production --page 2 --page-size 50
 ```
 
 When no bundles exist for the selected platform, channel, and runtimeVersion, `otalan rollback` exits without prompting for a target bundle. Successful rollbacks print `Bundle selected`, the selected bundle summary, and then `✓ Rollback done`.

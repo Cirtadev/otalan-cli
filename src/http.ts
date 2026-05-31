@@ -21,6 +21,20 @@ export type ReleaseItem = {
   resolvedDownloadUrl: string | null
 }
 
+export type ReleasePaginationMeta = {
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}
+
+export type ReleaseListPage = {
+  items: ReleaseItem[]
+  pagination: ReleasePaginationMeta
+}
+
 type JsonObject = Record<string, unknown>
 
 export type ReleaseContext = {
@@ -154,14 +168,14 @@ async function requestJson<T>(input: {
   apiKey: string
   path: string
   method?: 'GET' | 'POST'
-  query?: Record<string, string | undefined>
+  query?: Record<string, string | number | boolean | undefined>
   body?: unknown
 }) {
   const url = new URL(`${normalizeApiUrl(input.apiUrl)}${input.path}`)
 
   for (const [key, value] of Object.entries(input.query ?? {})) {
     if (value !== undefined) {
-      url.searchParams.set(key, value)
+      url.searchParams.set(key, String(value))
     }
   }
 
@@ -462,10 +476,10 @@ export async function listReleases(input: ReleaseClientConfig & {
   channel?: string
   runtimeVersion?: string
   bundleId?: string
+  page?: number
+  pageSize?: number
 }) {
-  const payload = await requestJson<{
-    items: ReleaseItem[]
-  }>({
+  const payload = await requestJson<ReleaseListPage>({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
     path: '/v1/releases',
@@ -475,8 +489,10 @@ export async function listReleases(input: ReleaseClientConfig & {
       channel: input.channel,
       runtimeVersion: input.runtimeVersion,
       bundleId: input.bundleId,
+      page: input.page,
+      pageSize: input.pageSize,
     },
   })
 
-  return payload.items
+  return payload
 }
