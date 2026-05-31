@@ -2,6 +2,22 @@
 
 All notable changes to `@otalan/cli` will be documented in this file.
 
+## 1.7.0 - 2026-05-31
+
+### Added
+
+- Add paginated `otalan bundles` and interactive `otalan rollback` bundle lists with `--page` and `--page-size`.
+- Show the first page of published bundles before the interactive `otalan bundle` bundle ID prompt.
+
+### Changed
+
+- Keep `otalan status` scanning paginated bundle results until it finds the active bundle.
+
+### Fixed
+
+- Keep `otalan bundles` compatible with release list API responses that do not include pagination metadata.
+- Print empty and out-of-range bundle pages without inverted item ranges.
+
 ## 1.6.0 - 2026-05-30
 
 ### Added

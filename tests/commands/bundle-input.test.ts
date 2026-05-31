@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 import { bundleCommandTestUtils } from '../../src/commands/bundle'
 import { stripAnsiLines } from '../helpers/ansi'
-import { createRelease, MANIFEST } from './bundle.fixtures'
+import { createRelease, createReleaseContextResponse, MANIFEST } from './bundle.fixtures'
 
 describe('bundleCommandTestUtils.resolveBundleRuntimeVersionInput', () => {
   test('uses explicit runtime version without prompting', async () => {
@@ -308,6 +311,80 @@ describe('bundleCommandTestUtils.resolvePublishedBundleHint', () => {
       checked: true,
       releases,
     })
+  })
+
+  test('uses only the first API page for the published bundle hint', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'otalan-cli-bundle-hint-'))
+    const firstPageRelease = createRelease({
+      bundleId: '1.2.3-web.9',
+      publishedAt: '2026-05-10T00:00:00.000Z',
+    })
+    const requests: string[] = []
+
+    try {
+      await Bun.write(path.join(cwd, 'otalan.config.json'), `${JSON.stringify({
+        organizationSlug: 'test-org',
+        projectSlug: 'mobile-app',
+        appName: 'Customer Portal',
+        appId: 'com.example.app',
+      }, null, 2)}\n`)
+
+      globalThis.fetch = (async (input, init) => {
+        const url = new URL(String(input))
+
+        requests.push(`${init?.method ?? 'GET'} ${url.pathname}${url.search}`)
+
+        if (url.pathname === '/v1/releases/context') {
+          return createReleaseContextResponse()
+        }
+
+        if (url.pathname === '/v1/releases' && !url.searchParams.has('page')) {
+          return new Response(JSON.stringify({
+            items: [firstPageRelease],
+            pagination: {
+              page: 1,
+              pageSize: 20,
+              totalItems: 21,
+              totalPages: 2,
+              hasPreviousPage: false,
+              hasNextPage: true,
+            },
+          }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+        }
+
+        throw new Error(`Unexpected request: ${url.pathname}${url.search}`)
+      }) as typeof fetch
+
+      const hint = await bundleCommandTestUtils.resolvePublishedBundleHint({
+        context: {
+          cwd,
+        },
+        options: {
+          'api-key': 'test-key',
+          'api-url': 'https://api.otalan.com',
+        },
+        platform: 'ios',
+        runtimeVersion: '1.2.3',
+      })
+
+      expect(hint).toEqual({
+        channel: 'production',
+        bundleId: '1.2.3-web.9',
+        checked: true,
+        releases: [firstPageRelease],
+      })
+      expect(requests).toEqual([
+        'GET /v1/releases/context',
+        'GET /v1/releases?appId=com.example.app&platform=ios&channel=production&runtimeVersion=1.2.3',
+      ])
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
   })
 
   test('returns the published bundle ID loaded for the selected tuple', async () => {

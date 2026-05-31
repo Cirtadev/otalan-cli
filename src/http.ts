@@ -35,6 +35,11 @@ export type ReleaseListPage = {
   pagination: ReleasePaginationMeta
 }
 
+type ReleaseListResponse = {
+  items: ReleaseItem[]
+  pagination?: Partial<ReleasePaginationMeta> | null
+}
+
 type JsonObject = Record<string, unknown>
 
 export type ReleaseContext = {
@@ -260,6 +265,51 @@ function normalizeReleaseChannelApps(item: ReleaseChannelResponseItem, channelIn
     .sort((left, right) => left.name.localeCompare(right.name) || left.appId.localeCompare(right.appId))
 }
 
+function readPositiveInteger(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : fallback
+}
+
+function readNonNegativeInteger(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : fallback
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function normalizeReleaseListPage(input: {
+  payload: ReleaseListResponse
+  requestedPage?: number
+  requestedPageSize?: number
+}): ReleaseListPage {
+  const fallbackPage = input.requestedPage ?? 1
+  const fallbackPageSize = input.requestedPageSize ?? Math.max(input.payload.items.length, 1)
+  const pagination = input.payload.pagination ?? {}
+  const page = readPositiveInteger(pagination.page, fallbackPage)
+  const pageSize = readPositiveInteger(pagination.pageSize, fallbackPageSize)
+  const totalItems = readNonNegativeInteger(pagination.totalItems, input.payload.items.length)
+  const totalPages = readPositiveInteger(
+    pagination.totalPages,
+    Math.max(1, Math.ceil(totalItems / pageSize)),
+  )
+
+  return {
+    items: input.payload.items,
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+      hasPreviousPage: readBoolean(pagination.hasPreviousPage, page > 1),
+      hasNextPage: readBoolean(pagination.hasNextPage, page < totalPages),
+    },
+  }
+}
+
 function normalizeReleaseChannels(items: ReleaseChannelResponseItem[]): ReleaseChannelItem[] {
   return items
     .map((item, index) => {
@@ -479,7 +529,7 @@ export async function listReleases(input: ReleaseClientConfig & {
   page?: number
   pageSize?: number
 }) {
-  const payload = await requestJson<ReleaseListPage>({
+  const payload = await requestJson<ReleaseListResponse>({
     apiUrl: input.apiUrl,
     apiKey: input.apiKey,
     path: '/v1/releases',
@@ -494,5 +544,9 @@ export async function listReleases(input: ReleaseClientConfig & {
     },
   })
 
-  return payload
+  return normalizeReleaseListPage({
+    payload,
+    requestedPage: input.page,
+    requestedPageSize: input.pageSize,
+  })
 }

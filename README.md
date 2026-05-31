@@ -403,7 +403,7 @@ otalan bundle --target expo --platform ios --bundle-id 1.0.5
 If you omit `bundleId`:
 
 - in an interactive terminal, the CLI prompts for a bundle ID and shows the local bundle ID from `.otalan/bundle/manifest.json` when available
-- when `otalan login` and `otalan init` are configured, the prompt prints the latest 20 published bundles for the selected platform/runtime version/channel and also shows the active or latest published bundle ID
+- when `otalan login` and `otalan init` are configured, the prompt prints the latest 20 published bundles for the selected platform/runtime version/channel and also shows the active or latest listed published bundle ID
 - published bundle hints use `--channel`, defaulting to `production`
 - duplicate published bundle ID checks use the same `--channel` value and default to `production`
 - pressing Enter without a bundle ID keeps the automatic bundle ID behavior

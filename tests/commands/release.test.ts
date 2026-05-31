@@ -151,6 +151,24 @@ describe('releaseTestUtils.resolveReleasePaginationOptions', () => {
   })
 })
 
+describe('releaseTestUtils.formatReleasePaginationSummary', () => {
+  test('prints out-of-range pages without an inverted item range', () => {
+    expect(stripAnsi(releaseTestUtils.formatReleasePaginationSummary(createReleasePagination({
+      page: 3,
+      pageSize: 50,
+      totalItems: 51,
+      totalPages: 2,
+      hasPreviousPage: true,
+    })))).toBe('i Page 3 of 2 (no items on this page; 51 total). Use --page 2 for the previous page.')
+  })
+
+  test('prints empty result sets without a range', () => {
+    expect(stripAnsi(releaseTestUtils.formatReleasePaginationSummary(createReleasePagination({
+      totalItems: 0,
+    })))).toBe('i Page 1 of 1 (0 of 0).')
+  })
+})
+
 describe('handleRollback', () => {
   test('exits without prompting when no bundles are available', async () => {
     const cwd = await createProjectFixture()
@@ -446,5 +464,55 @@ describe('handleBundlesList', () => {
     expect(joinedOutput).toContain('1.0.0-web.2')
     expect(joinedOutput).toContain('active')
     expect(joinedOutput).toContain('i Page 2 of 2 (51-51 of 51). Use --page 1 for the previous page.')
+  })
+
+  test('lists remote bundles when the API omits pagination metadata', async () => {
+    const cwd = await createProjectFixture()
+    const output: string[] = []
+
+    console.log = (...args: unknown[]) => {
+      output.push(args.map(String).join(' '))
+    }
+
+    globalThis.fetch = (async (input, init) => {
+      const url = new URL(String(input))
+
+      expect(init?.headers).toEqual({
+        'x-api-key': 'test-key',
+      })
+
+      if (url.pathname === '/v1/releases/context') {
+        return createReleaseContextResponse()
+      }
+
+      if (url.pathname === '/v1/releases') {
+        return new Response(JSON.stringify({
+          items: [createRelease({
+            bundleId: '1.0.0-web.2',
+            isActive: true,
+            rolloutState: 'active',
+          })],
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    }) as typeof fetch
+
+    await handleBundlesList({ cwd }, {
+      'api-key': 'test-key',
+      platform: 'ios',
+      channel: 'production',
+      'runtime-version': '1.0.0',
+    })
+
+    const joinedOutput = stripAnsiLines(output).join('\n')
+
+    expect(joinedOutput).toContain('1.0.0-web.2')
+    expect(joinedOutput).toContain('i Page 1 of 1 (1-1 of 1).')
   })
 })

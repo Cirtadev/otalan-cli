@@ -341,6 +341,55 @@ describe('listReleases', () => {
     })
     expect(page.items[0]?.bundleId).toBe('1.0.0-web.2')
   })
+
+  test('normalizes legacy release list responses without pagination metadata', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({
+        items: [{
+          id: 'release-123',
+          projectId: 'project-123',
+          appId: 'com.example.app',
+          platform: 'ios',
+          channel: 'production',
+          runtimeVersion: '1.0.0',
+          bundleId: '1.0.0-web.2',
+          releaseStorageId: 'release-storage-123',
+          checksum: 'abc123',
+          mandatory: true,
+          rolloutPercent: 100,
+          rolloutState: 'complete',
+          releaseNotes: null,
+          fileSizeBytes: 1234,
+          storageObjectExists: true,
+          isActive: true,
+          publishedAt: '2026-04-21T00:00:00.000Z',
+          resolvedDownloadUrl: 'https://cdn.example.com/ios.zip',
+        }],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })) as unknown as typeof fetch
+
+    await expect(listReleases({
+      apiUrl: 'https://api.otalan.com',
+      apiKey: 'test-key',
+      appId: 'com.example.app',
+    })).resolves.toEqual({
+      items: [expect.objectContaining({
+        bundleId: '1.0.0-web.2',
+      })],
+      pagination: {
+        page: 1,
+        pageSize: 1,
+        totalItems: 1,
+        totalPages: 1,
+        hasPreviousPage: false,
+        hasNextPage: false,
+      },
+    })
+  })
 })
 
 describe('getReleaseIngest', () => {

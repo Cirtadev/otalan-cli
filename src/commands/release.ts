@@ -8,6 +8,7 @@ import {
 } from './release-management'
 import { handlePublish } from './release-publish'
 import {
+  formatReleasePaginationSummary,
   isTerminalIngestStatus,
   resolveChannelsAppId,
   resolveReleasePaginationOptions,
@@ -27,6 +28,7 @@ export {
 }
 
 export const releaseTestUtils = {
+  formatReleasePaginationSummary,
   resolveChannelsAppId,
   resolveReleasePaginationOptions,
   isTerminalIngestStatus,

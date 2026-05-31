@@ -238,10 +238,17 @@ export function resolveReleasePaginationOptions(options: Record<string, string |
 }
 
 export function formatReleasePaginationSummary(pagination: ReleasePaginationMeta) {
-  const startItem = pagination.totalItems === 0
-    ? 0
-    : ((pagination.page - 1) * pagination.pageSize) + 1
-  const endItem = Math.min(pagination.totalItems, pagination.page * pagination.pageSize)
+  const pageSize = Math.max(1, pagination.pageSize)
+  const startItem = ((pagination.page - 1) * pageSize) + 1
+  const hasItemsOnPage = pagination.totalItems > 0 && startItem <= pagination.totalItems
+  const endItem = hasItemsOnPage
+    ? Math.min(pagination.totalItems, pagination.page * pageSize)
+    : 0
+  const itemSummary = pagination.totalItems === 0
+    ? '0 of 0'
+    : hasItemsOnPage
+      ? `${startItem}-${endItem} of ${pagination.totalItems}`
+      : `no items on this page; ${pagination.totalItems} total`
   const pageAction = pagination.hasNextPage
     ? `Use --page ${pagination.page + 1} for the next page.`
     : pagination.hasPreviousPage
@@ -249,7 +256,7 @@ export function formatReleasePaginationSummary(pagination: ReleasePaginationMeta
       : undefined
 
   return formatInfo([
-    `Page ${pagination.page} of ${pagination.totalPages} (${startItem}-${endItem} of ${pagination.totalItems}).`,
+    `Page ${pagination.page} of ${pagination.totalPages} (${itemSummary}).`,
     pageAction,
   ].filter(Boolean).join(' '))
 }
